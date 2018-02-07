@@ -1,0 +1,394 @@
+---
+title: "Exercise 5"
+author: "LNass"
+date: "August 24, 2017"
+output: html_document
+---
+
+de novo Transcriptome Build
+===========================
+
+Block 1: Cleaning, Filtering, and Digital Normalization of the Data
+-------------------------------------------------------------------
+
+First we load up pander in order to depict our tables.
+
+```{r Packages}
+library(pander)
+```
+
+**1. Use the process_shortreads program, which is part of the Stacks package, to clean your set of paired-end reads. For details on flags and parameters, see: http://catchenlab.life.illinois.edu/stacks/comp/process_shortreads.php . We will be assembling the SscoPE_R1.fastq + SscoPE_R2.fastq dataset found in /home/csmall/Bi623/, which you should copy to your own working directory. Note that this set includes fewer than 60 million read pairs. This is adequate coverage for many transcriptome assembly projects, but the requirements vary depending on the organism, tissue, etc.**
+
+**a. You will want to remove any read with an uncalled base, enable quality trimming (use default sliding window and score limit), and trim adapter sequence.**
+
+```
+module load slurm
+module load easybuild
+module load intel/2017a
+module load Stacks/1.46
+```
+
+**Tells it file type:** -i gzfastq
+
+**Shows first paired end file**: -1 /home/lnassar/Bi633/Ex5/SscoPE_R1.fastq.gz
+
+**Shows second paired end file**: -2 /home/lnassar/Bi633/Ex5/SscoPE_R2.fastq.gz
+
+**Path to output directory:** -o /home/lnassar/Bi633/Ex5/results
+
+**Remove read with  uncalled base:** -c
+
+**Discard reads with low quality scores:** -q
+
+**Tells output file type:** -y fastq
+
+**Designate adapters:** --adapter_1 AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+
+**2nd adapter:** --adapter_2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+
+**Number of adapter mismatches:** --adapter_mm 2
+
+**b. Allow up to 2 mismatches in the adapter sequences for trimming.**
+
+**c. Rename the cleaned read pair files SscoPEclean_R1.fastq and SscoPEclean_R2.fastq. Don't worry about carrying "orphaned" reads (files with ".rem." in the name) to the next step.**
+
+Forward adapter: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+
+Reverse adapter: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT
+
+Final code submitted to talapas:
+
+```
+process_shortreads -i gzfastq -1 /home/lnassar/Bi633/Ex5/SscoPE_R1.fastq.gz -2 /home/lnassar/Bi633/Ex5/SscoPE_R2.fastq.gz -o /home/lnassar/Bi633/Ex5/results -c -q -y fastq --adapter_1 AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC --adapter_2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --adapter_mm 2
+```
+
+**2. The process_shortreads program will trim the reads to remove low quality sequence or to remove fragments of adapter sequence. We want to explore how many of our reads were trimmed, and to what length. Using UNIX commands , for example, summarize the distributions of read lengths (one for R1s, one for R2s) for the trimmed data. Plot these distributions in R and turn in with the rest of the assignment. Think about the clearest way to visualize (plot) the distribution of trimmed read lengths.**
+
+We found our read lengths for R1 and R2 by manipulating out trimmed output files in unix to pull out just the sequence lines, and then turn that into line length count, which as saved into another file that was uploaded to R.
+
+```
+cat SscoPE_R1.1.fq | awk 'NR%4==2' | awk '{print length}' | sort | uniq -c > R1_trimmed_read_count.txt
+```
+
+```
+cat SscoPE_R2.2.fq | awk 'NR%4==2' | awk '{print length}' | sort | uniq -c > R2_trimmed_read_count.txt
+```
+Here we read in our files as tables so they can be ploted
+
+```{r Read in Trimmed Files}
+R1_trimmed_read <- read.table('R1_trimmed_read_count.txt')
+R2_trimmed_read <- read.table('R2_trimmed_read_count.txt')
+```
+
+Now we plot our trimmed reads so that they overlay on the same graphs
+
+```{r Trimmed_Length_Plots}
+plot(R1_trimmed_read$V2,log10(R1_trimmed_read$V1), col="blue", pch=0, xlab = "Length of Read", ylab = "Frequency of Read", main = "Trimmed Read Length vs. Frequency")
+points(R2_trimmed_read$V2,log10(R2_trimmed_read$V1),col="green", pch=2)
+legend(30, 7, legend = c("R1 Trimmed Reads","R2 Trimmed Reads"), col=c("blue","green"), pch = c(0,2))
+
+```
+
+**3. Filter the clean data for rare k-mers using kmer_filter, also part of the Stacks package. Perform rare k-mer filtering ONLY, and rename the new files SscoPEcleanfil_R1.fastq and SscoPEcleanfil_R2.fastq.**
+
+In order to run kmer_filter, we had to specify some commands, here the slurm script:
+
+```
+module load slurm
+module load easybuild
+module load intel/2017a
+module load Stacks/1.46
+
+kmer_filter -1 SscoPE_R1.1.fq -2 SscoPE_R2.2.fq --rare -o /home/lnassar/Bi633/Ex5/results/filter_results
+```
+The -1 and -2 specify the first and second input files, the -o specifies out output directory, and --rare turns on filtering based on rare k-mers. We then renamed our files.
+
+**a. Explain in a sentence or two what this is doing to your data. Don't worry about carrying "orphaned" reads to the next step.**
+
+Kmer filter --rare is filtering out reads by the number of rare kmers they contain. These rare kmers are often sequencing errors. A kmer is considered rare when its coverage is at 15% or below the median kmer coverage for the read. A read is dropped when it contains 12 or more rare kmers in a row.
+
+**4. Run kmer_filter again, this time to normalize the cleaned, filtered data to 2 different coverages.**
+
+All of the following section files were then compressed using gzip and renamed
+
+**a. Normalize to 40X k-mer coverage; compress the output files**
+
+The slurm script to do this was:
+
+```
+module load slurm
+module load easybuild
+module load intel/2017a
+module load Stacks/1.46
+
+kmer_filter -1 SscoPE_R1.1.fq -2 SscoPE_R2.2.fq -o /home/lnassar/Bi633/Ex5/results/filter_results/filter_norm40 --normalize 40
+```
+```
+mv SscoPE_R1.1.fil.norm.fq SscoPEcleanfil40x_R1.fastq
+mv SscoPE_R2.2.fil.norm.fq SscoPEcleanfil40x_R2.fastq
+gzip SscoPEcleanfil40x_R1.fastq SscoPEcleanfil40x_R2.fastq
+```
+
+**b. Similarly, normalize the cleaned, filtered data to 20X k-mer coverage**
+
+```
+module load slurm
+module load easybuild
+module load intel/2017a
+module load Stacks/1.46
+
+kmer_filter -1 SscoPE_R1.1.fq -2 SscoPE_R2.2.fq -o /home/lnassar/Bi633/Ex5/results/filter_results/filter_norm20 --normalize 20
+```
+```
+mv SscoPE_R1.1.fil.norm.fq SscoPEcleanfil20x_R1.fastq
+mv SscoPE_R2.2.fil.norm.fq SscoPEcleanfil20x_R2.fastq
+gzip SscoPEcleanfil20x_R1.fastq SscoPEcleanfil20x_R2.fastq
+```
+
+**d. Briefly explain in a sentence or two what this is doing to your data.**
+
+Normalize removes over-represented kmer reads so they do not clutter your data. It basically fitlers out abundant kmers above a certain read median, but keeps enough for representation.
+
+**5. At this point you should have 4 sets of processed paired-end reads:**
+**Count and report the number of total read pairs for each set.**
+
+In order to count the number of reads, variations of the following code was used. The awk command is pulling out every sequence line, which is a simple way of dividing by 4.
+
+```
+zcat SscoPEcleanfil40x_R1.fastq.gz | awk 'NR%4==2' | wc -l
+```
+Cleaned: 48984846
+
+Cleaned + Kmer Filter: 40423875
+
+Cleaned + Kmer Filter + norm 40x: 14326197
+
+Cleaned + Kmer Filter + norm 20X: 9401682
+
+**6. Now run kmer_filter 3 times - on the cleaned set, the cleaned/filtered set, and the cleaned/filtered/20X normalized, set - using just the --k_dist flag, and nothing else**
+
+In order to do this, three separate slurm scripts were created. For brevity, the module loading will be excempt.
+
+```
+kmer_filter -1 SscoPE_R1.1.fq -2 SscoPE_R2.2.fq -o /home/lnassar/Bi633/Ex5/results/final_four_data/clean --k_dist
+```
+```
+kmer_filter -1 SscoPE_R1.1.fil.fq -2 SscoPE_R2.2.fil.fq -o /home/lnassar/Bi633/Ex5/results/final_four_data/clean_filter --k_dist
+```
+```
+kmer_filter -1 SscoPEcleanfil20x_R1.fastq.gz -2 SscoPEcleanfil20x_R2.fastq.gz -o /home/lnassar/Bi633/Ex5/results/final_four_data/clean_filter_norm20 --k_dist -i gzfastq
+```
+**Plot the distributions in R and include the figures with the rest of the assignment. How do the 3 distributions differ?**
+
+The three output files were read in to R
+
+```{r kmer frequency plots}
+kmer_clean <- read.table('kmer_clean_dist.out', header=T)
+kmer_clean_filt <- read.table('kmer_clean_filter.out', header=T)
+kmer_clean_filt_norm20 <- read.table('kmer_clean_filter_norm20.out', header=T)
+```
+```{r kmer plots}
+plot(log10(kmer_clean$KmerFrequency),log10(kmer_clean$Count), col="black", xlab = "Kmer Frequency (Log Scale)", ylab = "Kmer Count (Log Scale)", main = "Kmer Frequency vs. Count", type = "n")
+lines(log10(kmer_clean$KmerFrequency),log10(kmer_clean$Count), col="black")
+lines(log10(kmer_clean_filt$KmerFrequency),log10(kmer_clean_filt$Count), col="green")
+lines(log10(kmer_clean_filt_norm20$KmerFrequency),log10(kmer_clean_filt_norm20$Count), col="blue")
+legend(2, 8, legend = c("Clean Reads","Clean + Filtered Reads","Clean + Filtered + Normalized 20X Reads"), col=c("black","green","blue"), pch = c(1,2,0))
+
+```
+
+The clean reads and the clean + filtered reads have a minimal difference on their distribution even though over 8 million reads were trimmed, the clearer trend is observed in the 20X normalized reads. This is important because these abundant kmers are from actual abundant transcripts, but we want to represent them in a more normalized way so they don't skew our data. That's why we filtered almost 30 million reads.
+
+Block 2: Evaluation of Trinity Assemblies
+-----------------------------------------
+
+**Do any differences between the rare and 40Xnorm assemblies stand out?**
+
+It seems that the two originating files had vastly different sizes, the rare/clean 4.7MB each and the 40x with 1.6MB, this makes sense as a large amounts of reads were dropped after normalization. However even though it's almost three times bigger the run times were fairly comparable as was the unique kmer count, leading one to think that the removed reads were comprised mostly of over represented transcripts.
+
+**Consult the Trinity documentation (https://github.com/trinityrnaseq/trinityrnaseq/wiki), and explain the options below**
+
+```
+Trinity.pl --seqType fq --JM 50G --left $work/SscoPEcleanfil_R1.fq \
+--right $work/SscoPEcleanfil_R2.fq --output $work/assembly --CPU 10 \
+--min_contig_length 300 --min_kmer_cov 3 --group_pairs_distance 800
+```
+**--seqType fq** The type of reads file, fasta of fastq
+
+**--left and --right** For paired end reads, designates which read is which
+
+**--JM 50G** Specifies the amount of memory used, in this case 50 gigs
+
+**--output** Name of directory for output files
+
+**--min_contig_length** Minimum assembled contig length to report
+
+**--min_kmer_cov 3** Minimum number of kmer required to be a part of the extension step
+
+**--group_pairs_distance** For use with multiple paired end library fragment sizes
+
+**4. Using information in the two assembly files, calculate the number of transcripts, the maximum transcript length, the minimum transcript length, the mean transcript length, and the median transcript length.**
+
+First we trimmed out and ordered all the read lengths using the following unix commands:
+
+```
+cat tri_40Xnorm.fasta | grep "len" | cut -f 2 -d " " | cut -f 2 -d "=" | sort -n > 40xnorm_lengths
+
+cat tri_rare.fasta | grep "len" | cut -f 2 -d " " | cut -f 2 -d "=" | sort -n > rareclean_lengths
+```
+We then brought our files into R studio and binded them together for analysis.
+
+```{r Lengths}
+rareclean_lenghts <- read.table('rareclean_lengths', col.names = "RareCleanLen")
+x40norm_lenghts <- read.table('40xnorm_lengths', col.names = "40xNormLen")
+
+#This will give us the number of transcripts per file
+nrow(rareclean_lenghts) #113729
+nrow(x40norm_lenghts) #140045
+
+#This will give us the largest transcript length present
+max(rareclean_lenghts$RareCleanLen, na.rm = TRUE) #18857
+max(x40norm_lenghts$X40xNormLen, na.rm = TRUE) #22465
+
+#This will give us the minimum transcript length present
+min(x40norm_lenghts$X40xNormLen, na.rm = TRUE) #301
+min(x40norm_lenghts$X40xNormLen, na.rm = TRUE) #301
+
+#This will give us the mean of the transcripts
+mean(rareclean_lenghts$RareCleanLen) #2483.341
+mean(x40norm_lenghts$X40xNormLen) #2600.411
+
+#This will give us the median of each data set
+median(rareclean_lenghts$RareCleanLen) #1960
+median(x40norm_lenghts$X40xNormLen) #2139
+```
+**Regardless of how you tally the statistics, plot the contig length distributions for each assembly using R hist() and boxplot() functions**
+
+```{r boxplot}
+boxplot(log2(rareclean_lenghts$RareCleanLen), log2(x40norm_lenghts$X40xNormLen), col = c("green","red"), names = c("RareClean", "40xNorm"), main = "Log2 Scale of RareClean vs RareClean+40xNormalized Transcript Lengths" )
+```
+```{r histogram}
+par(mfrow = c(1, 2))
+hist(rareclean_lenghts$RareCleanLen, xlim = c(0,23000), ylim = c(0,35000), col = "green", xlab = "RareClean", main = "RareClean \n Transcript Frequency")
+hist(x40norm_lenghts$X40xNormLen, xlim = c(0,23000), ylim = c(0,35000), col = "red", xlab = "40xNorm", main = "RareClean+40xNorm \n Transcript Frequency")
+```
+
+**5. Based on your assembly statistics and what you know about transcripts, comment on whether there is a clear difference in quality between the two Trinity assemblies. Also comment on differences in the total number of transcripts and transcript groups ("loci") for the two assemblies**
+
+There is definitely a clear difference between the two assemblies. In our histogram we see the green simply Rare/Clean dataset had a lower transcript length than our red Rare/Clean/40xNormalized data set. These longer transcript lengths are desired in the assembly build. On our histogram another pattern is discerned, the green Rare/Clean data set quickly tapers offmeaning we have a wider distribution of transcript lengths observed, including some larger outliers which are just seen once. Our normalized data set has most all of its data points closer to each other which is an expected result from normalization, notice the large initial peak seen in the green data set is not present in the red. If the data were binned into smaller categories the difference would be even more obvious.
+
+In order to examine the number of transcripts belong to each bundle of similar sequences, we used the following unix commands:
+
+```
+cat tri_40Xnorm.fasta | grep "^>" | cut -f 1 -d " " | cut -f 1,2 -d "_" | sort | uniq -c | sort -n -r | head
+
+cat tri_rare.fasta | grep "^>" | cut -f 1 -d " " | cut -f 1,2 -d "_" | sort | uniq -c | sort -n -r | head
+```
+
+Our results are:
+
+```
+   Rare/Clean/Normalized
+   1297 >comp21856_c0
+   1159 >comp21385_c1
+    799 >comp20891_c0
+    753 >comp21803_c2
+    738 >comp19892_c0
+    713 >comp22745_c2
+    663 >comp19331_c0
+    652 >comp18893_c0
+    632 >comp18727_c0
+    618 >comp20540_c0
+    
+    Rare/Clean
+    892 >comp24570_c2
+    753 >comp23572_c0
+    669 >comp25040_c1
+    566 >comp23173_c2
+    514 >comp24820_c0
+    506 >comp23967_c0
+    499 >comp18861_c0
+    487 >comp24853_c0
+    486 >comp24584_c1
+    447 >comp22766_c0
+```
+
+We can see here that the Rare/Clean/Normalized group has a much larger amount of transcripts per loci, a sign of a better assembly. The other just Rare/Clean data set's values have fewer transcripts. This shows a better detection of possible splice variants in the assembly.
+
+**BLAST your pipefish transcripts from each assembly (as separate jobs) against threespine stickleback protein sequences from Ensembl**
+
+The two trinity assemblies (40x/rare/clean and rare/clean) were then blasted against a stickleback database using blastx since it is nucleotide data to protein data. The two slurm scripts are as follows, excluding the module loading and headers:
+
+Rare/Clean
+```
+blastx -query tri_rare.fasta -db Sticklebackdb -evalue 1e-5 -max_target_seqs 1 -num_threads 28 -outfmt '6 qseqid qlen sseqid slen pident nident length mismatch qstart qend sstart send evalue bitscore' -out /home/lnassar/Bi633/Ex5/Block2/rareclean/rareclean.tsv
+```
+
+Rare/Clean/40x
+```
+blastx -query tri_40Xnorm.fasta -db Sticklebackdb -evalue 1e-5 -max_target_seqs 1 -num_threads 28 -outfmt '6 qseqid qlen sseqid slen pident nident length mismatch qstart qend sstart send evalue bitscore' -out /home/lnassar/Bi633/Ex5/Block2/40xnorm/40xnorm.tsv
+```
+
+**Produce a table of the top BLAST hits you identified for each pipefish transcript, including the trinity transcript ID, stickleback blast hit e-value, stickleback blast hit protein ID, and stickleback hit external gene ID. Are there more unique stickleback hits for one assembly vs. the other?**
+
+First we read in our three files, the two Blastx results and the biomart file.
+
+```{r read in blastxresults and biomart}
+#First we Read in our blastx output files and the file without the "." protein IDs and bind them
+Blastx40x = read.table("40xnorm.tsv")
+Blastx40xProteinID = read.table("40xnormproteinIDs", col.names = "ProtID")
+Blastx40xpre = cbind.data.frame(Blastx40x,Blastx40xProteinID)
+
+Blastrare = read.table("rareclean.tsv")
+BlastrareProteinID = read.table("rareproteinIDs", col.names = "ProtID")
+Blastrarepre = cbind.data.frame(Blastrare,BlastrareProteinID)
+
+#This is our biomart file with protein IDs and descriptions
+biomart = read.table("mart_export.txt", sep="\t", header = T)
+
+#Here we merge out data frames so all protein ID's that match with blast and the biomart file are joined together
+Blastx40xBio = merge.data.frame(x=Blastx40xpre,y=biomart, by.x = "ProtID", by.y = "Protein.stable.ID")
+BlastrareBio = merge.data.frame(x=Blastrarepre,y=biomart, by.x = "ProtID", by.y = "Protein.stable.ID")
+
+#These lines clean up our resulting table to just the fields we want
+Blastx40xBio[3:13] = NULL
+Blastx40xBio$V14 = NULL
+
+BlastrareBio[3:13] = NULL
+BlastrareBio$V14 = NULL
+
+#Add proper titles to our Table
+colnames(Blastx40xBio) = c("Protein ID", "Trinity Tran ID", "e-value", "Description")
+colnames(BlastrareBio) = c("Protein ID", "Trinity Tran ID", "e-value", "Description")
+
+#An example of the resulting table
+pander(head(Blastx40xBio))
+```
+
+**Are there more unique stickleback hits for one assembly vs. the other?**
+
+In order to find the uniq files we used the following unix commands:
+
+40x Normalized + clean + rare filtered: 15174 unique hits
+
+```
+cat 40xnorm.tsv | cut -f 3 | sort | uniq -c | sort -n -r | wc -l
+```
+
+Rare and cleaned: 14831 unique hits
+
+```
+cat rareclean.tsv | cut -f 3 | sort | uniq -c | sort -n -r | wc -l
+```
+
+We see more unique hits in the 40x Noramlized + clean + rare filtered. This is expected as it is a higher quality assembly with over-represented kmers removed.
+
+**What does this file tell you about transcriptome completeness for CEGs, and redundancy within our rare-kmer-filtered assembly?**
+
+Here we read in our table file and make a visual representation with pander.
+
+```{r CEG}
+CEG = read.table("rare_ceg.completeness_report", sep = "\t",col.names = c("Header","#Prots",	"%Completeness",	"#Total",	"Average", "%Ortho"), row.names = 1)
+pander(CEG)
+```
+
+The CEG output file is a good measure for the accuracy of the assembly. The first two columns show that 98.79% of the ultra conserved CEGs were found in the assembly, and 99.60 when considered as a partial hit. This shows it is a fairly complete assembly. As far as redundancy we see multiple numbers of orthologs per CEG, at a complete average of 3.06, and this is expected as we have transcriptome data, not genomic data. Our assembly should be matching to a larger number of orthologs. 

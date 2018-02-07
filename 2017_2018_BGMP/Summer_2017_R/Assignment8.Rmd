@@ -1,0 +1,438 @@
+---
+title: "Ex8"
+author: "LNass"
+date: "September 6, 2017"
+output: html_document
+---
+
+Assignment 8:KEGG Set Enrichment Analysis and Visualization of RNA-seq data
+===========================================================================
+
+1. Read in the edgeR differential gene expression results for pipefish and format KEGG pathway information
+------------------------------------------------------------------------------
+
+First we need to install our necessary packages:
+
+```{r install packages1, include=FALSE}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("gage")
+library("gage")
+
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("gageData")
+library("gageData")
+
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("pathview")
+library("pathview")
+```
+Now we Read in the files and load the KEGG data for GSEA
+
+```{r read in file}
+kegg_pouch <- read.delim("pouch_RNAseq.tsv", sep = "\t", stringsAsFactors=FALSE)
+#head(kegg_pouch)
+```
+
+2. Set up and perform GSEA for all KEGG pathways using gage
+------------------------------------------------------------
+
+```{r GSEA}
+data(kegg.sets.ko)
+data(sigmet.idx.ko)
+kegg.sets.ko <- kegg.sets.ko[sigmet.idx.ko]
+#head(kegg.sets.ko, 3)
+```
+
+**What class of object is kegg.sets.ko, and what kind of information does it contain?**
+
+```{r Q1}
+class(kegg.sets.ko)
+```
+
+Kegg.sets.ko is a 'list' object. It contains kegg ortholog IDs.
+
+
+Now we must construct a vector of our fold change values and use the name function to attach KO IDs to the values if they have one
+
+```{r GSEA2}
+pouch_foldchanges <- kegg_pouch$logFC
+names(pouch_foldchanges) <- kegg_pouch$ko_ID
+#head(pouch_foldchanges)
+```
+
+Now we run gage on our fold change values to test enrichment with extreme values
+
+```{r gage}
+pouch_test <- gage(pouch_foldchanges, gsets=kegg.sets.ko, same.dir=FALSE)
+
+lapply(pouch_test, head)
+#head(pouch_test$greater, 30) 
+
+#Subset with false discovery rate <.1
+subset(pouch_test$greater, pouch_test$greater[ ,4]<0.1)
+```
+
+**Which KEGG pathways are enriched for genes with exceptional pregnancy specific gene expression? Which two of these are related to the immune system?**
+
+Four genes total: ko04060, ko04080, ko04020 and ko04610. The two that are related to the immune response are:
+
+**ko04060 Cytokine-cytokine receptor interaction**: This pathway is involved with cytokines which are inter cellular cells involved in many functions including inflammatory host defense.
+
+**ko04610 Complement and coagulation cascades**: The complement system is a proteolytic cascade in blood plasma and a mediator of innate immunity.
+
+3. Visualize pregnancy fold change magnitudes for all genes in the "coagulation and complement" KEGG pathway
+-----------------------------------------------------------------------------------
+
+Now we must visualize the pregnancy fold change by looking closer at the relevant KEGG pathway
+
+```{r pregnancy}
+pouch_pathways <- rownames(pouch_test$greater)[4]
+pouch_ids <- substr(pouch_pathways, start=1, stop=7)
+pouch_ids
+
+#Drawing the pathway
+pathview(gene.data=pouch_foldchanges,
+         pathway.id=pouch_ids, species="ko", new.signature=FALSE,
+         trans.fun = list(gene = NULL, cpd = NULL),
+         low = list(gene = "green", cpd = "blue"),
+         mid = list(gene = "yellow", cpd = "gray"),
+         high = list(gene = "red", cpd = "yellow"), na.col = "transparent")
+```
+
+**What does the plot tell you about components of this pathway and male pregnancy?**
+
+There seems to be a large amount of positive fold changes specifically for the genes that are part of the coagulation cascade. Both the extrinsic and intrinsic pathways show significant positive magnitude changes with only one gene showing a negative fold. Conversely there seems to be less of an effect on the complement cascade with fewer amounts of both positive and negative fold changes observed. The pathway certainly seems to be affected by male pregnancy, specially the coagulation cascade.
+
+4. Visualize multi-genic expression patterns in pregnant and non-pregnant pouch tissues using non-metric multidimensional scaling
+--------------------------------------------------------------------------------------
+
+First we install the necessary packages:
+
+```{r install packages2, include=FALSE}
+#install.packages("vegan")
+#install.packages("MASS")
+library("vegan")
+library("MASS")
+```
+
+Now we must read in the normalized pipefish pouch expression file:
+
+```{r Read in pouch expression}
+pipe_TMMvals <- read.csv("pouch_TMM_values.csv", head = TRUE, row.names = 1)
+dim(pipe_TMMvals)
+pipe_TMMvals <- t(pipe_TMMvals)
+#head(pipe_TMMvals)
+```
+
+**What happened to our data frame after using the t() function?**
+
+It transposed the rows and columns.
+
+Next we compute a dissimilarity matrix using the Bray-Curtis metric:
+
+```{r Dissimilarity}
+pipe.dis <- vegdist(pipe_TMMvals)
+
+#Now we perform multidimensional scaling to find 2 'latent' dimensions for which distance between samples agrees with original distance, we do this with a stressplot.
+
+pipe.mds0 <- isoMDS(pipe.dis, k=2)
+stressplot(pipe.mds0, pipe.dis, main = "Pipefish Multidimensional Scaling k=2")
+```
+
+**What do you think is meant by "convergence"? Think about how nmds works, and consult the literature, if necessary.**
+
+What this is doing is trying to retain the distance between all 15252 dimensions of the points while collapsing it into 2 dimensions. This means that values generally retain most of their spacing from each other, meaning how different they are from each other. This is a representation of our dissimilarity matrix.
+
+Now we need to see if there is a difference between expression of pregnant and non-pregnant individuals
+
+The first step is to construct a data frame that links the pouch IDs with pregnancy status:
+
+```{r pregnancy data}
+#First we build the data frame
+Targets <- as.data.frame(rownames(pipe_TMMvals))
+Targets$PregStat <- factor(c(rep("preg",6),rep("nonpreg",6)))
+colnames(Targets) <- c("ID","PregStat")
+
+#Next we establish the plot parameters and use ordiplot to make our plot
+par(mgp = c(2.5, 1, 0))
+preg=as.character(Targets$PregStat)
+fig <- ordiplot(pipe.mds0, main="Brood Pouches in Transcript Space",
+                ylab="nMDS Dimension 2", xlab="nMDS Dimension 1",
+                font.lab=2, font.axis=2, cex.axis=.7, type="none", cex.main=1,
+                xlim=(c(-.2,0.2)))
+ordiellipse(pipe.mds0,groups=preg,label=FALSE, lwd=2,
+            show.groups=preg[1:6], col="darkorange4",
+            draw="lines")
+ordiellipse(pipe.mds0,groups=preg,label=FALSE, lwd=2,
+            show.groups=preg[7:12], col="dodgerblue4",
+            draw="lines")
+points(fig, "sites", pch=c(rep(19,6),rep(15,6)),
+       col=c(rep("darkorange3",6),rep("cornflowerblue",6)), cex=1.5)
+legend(-.35, .1, legend = c("Pregnant","Not Pregnant"), col=c("darkorange4","dodgerblue4"), pch = c(19,15))
+```
+
+**What does this plot tell you about the brood pouch transcriptomes profiled in this study?**
+
+The transcriptomes differ between pregnant and non-pregnant pouches. Each of the sample clusters around its related samples meaning they are much more closely related to each other of the same treatment than to pregnant/non-pregnant.
+
+Now we will re-do the ordiplot but instead use 3 nMDS dimensions:
+
+```{r pregnancy ordiplot2}
+pipe.mds3 <- isoMDS(pipe.dis, k=3)
+stressplot(pipe.mds3, pipe.dis, main = "Pipefish Multidimensional Scaling k=3")
+
+par(mgp = c(2.5, 1, 0))
+preg=as.character(Targets$PregStat)
+fig <- ordiplot(pipe.mds3, main="Brood Pouches in Transcript Space",
+                ylab="nMDS Dimension 3", xlab="nMDS Dimension 2",
+                font.lab=2, font.axis=2, cex.axis=.7, type="none", cex.main=1,
+                xlim=(c(-.2,0.2)))
+ordiellipse(pipe.mds3[[1]][,2-3],groups=preg,label=FALSE, lwd=2,
+            show.groups=preg[1:6], col="darkorange4",
+            draw="lines")
+ordiellipse(pipe.mds3[[1]][,2-3],groups=preg,label=FALSE, lwd=2,
+            show.groups=preg[7:12], col="dodgerblue4",
+            draw="lines")
+points(fig, "sites", pch=c(rep(19,6),rep(15,6)),
+       col=c(rep("darkorange3",6),rep("cornflowerblue",6)), cex=1.5)
+legend(-.25, -.05, legend = c("Pregnant","Not Pregnant"),col=c("darkorange4","dodgerblue4"), pch = c(19,15))
+```
+
+5. permutational Multivariate Analysis of Variance (perMANOVA) to test for multivariate transcriptional differences between pregnant and non-pregnant males
+--------------------------------------------------------------------
+
+In this next part we attempt to see how much of the dissimilarity is due to pregnancy. To accomplish this, we will use perMANOVA
+
+```{r perMANOVA}
+otu.env <- Targets
+adonis(pipe.dis ~ PregStat, otu.env, perm=999)
+```
+
+**Based on the output of adonis(), do we see a significant effect of pregnancy status?**
+
+There certainly seems to be a significant effect due to pregnancy status. If we look at our R2 value for PregStat vs Residuals, we see that just over 26% of the dissimilarity can be explained by the pregnancy status. This is a significant effect and evidence that the expression of pregnant males is meaningfully different.
+
+6. Constructing a heatmap with clustering dendrograms for Coagulation and Complement Cascade KEGG pathway genes.
+--------------------------------------------------------------------------------------------
+
+First we install the necessary packages
+
+```{r, include=FALSE}
+#install.packages("gplots")
+#install.packages("RColorBrewer")
+#install.packages("dendextend")
+library("gplots")
+library("RColorBrewer")
+library("dendextend")
+```
+
+Now we read in the file with the CPM expression data for the KEGG genes in the "Coagulation and Complement Cascades" pathway.
+
+```{r Heatmap}
+pouch_compcoag <- read.delim("CompCoag_pouch_multivar.tsv", sep = "\t",
+                             row.names = 1, header = F)
+
+colnames(pouch_compcoag) <- c("KO","name","P9","P8","P7","P6","P5","P3",
+                               "NP11","NP10","NP4","NP3","NP2","NP1")
+
+#Defining a vector of gene names
+names_compcoag <- pouch_compcoag$name
+
+#Add 0.01 to each CPM value so that we will not log transform any zeros
+pouch_compcoag <- log2(pouch_compcoag[,3:14]+0.01)
+
+#Transpose for row-wise scaling and return
+pouch_compcoag.n <- scale(t(pouch_compcoag))
+pouch_compcoag.tn <- t(pouch_compcoag.n)
+```
+
+**Why do we add 0.01 to all values?**
+
+Because logs of 0 will come out as undefined, so we add the  0.01 so that the transformation will work.
+
+**What class of object are we dealing with now?**
+
+We are dealing with matrix data.
+
+Now we begin to analyze using multivariate dissimilarity
+
+```{r multi-var dissimilarity}
+compcoag.d1 <- dist(pouch_compcoag.n, method = "euclidean", diag = FALSE,
+                    upper = FALSE)
+round(compcoag.d1,3)
+```
+
+**Which two samples are the most dissimilar based on Euclidean Distance?**
+
+P3 and NP1 are the mist dissimilar with a score of 11.779.
+
+Now we will calculate multi-var dissimilarity for all gene pairs.
+
+```{r multi-var dissimilarity2}
+compcoag.d2 <- dist(pouch_compcoag.tn,method = "euclidean", diag = FALSE,
+                    upper = TRUE)
+
+#Now we cluster samples, then genes, using Ward linkage clustering
+compcoag.c1 <- hclust(compcoag.d1, method = "ward.D2", members = NULL)
+compcoag.c2 <- hclust(compcoag.d2, method = "ward.D2", members = NULL)
+
+#Let's take a look at dendrograms based on the clustering
+par(mfrow=c(2,1),cex=0.5) # Make 2 rows, 1 col plot frame and shrink labels
+plot(compcoag.c1)
+plot(compcoag.c2)
+```
+
+**What does the sample dendrogram tell us about pregnant (P) and non-pregnant (NP) pouch transcriptomes?**
+
+All of the pregnant are more closely related to the pregnant and conversely all of the non-pregnant are more closely related to the non-pregnant. Even though some share closer relations to each other the groups don't connect to each other until they first separate by pregnancy status.
+
+Now we prepare to plot our heatmap
+
+```{r heatmap}
+#First we print the order left to right
+compcoag.c1$order
+
+#Set the color scale and resolution for our heatmap
+compcoag_pal <- colorRampPalette(c("green","yellow","red"))(n = 299)
+
+#Plot the heatmap
+par(cex.main=0.5, cex.axis=0.5, font=2, font.axis=2) # Shrink title fonts on plot
+heatmap.2(pouch_compcoag.tn,
+          Colv=rotate(as.dendrogram(compcoag.c1),
+          order=c(12,11,10,9,8,7,6,5,4,3,2,1)),
+          Rowv=as.dendrogram(compcoag.c2),
+          labRow=names_compcoag,
+          density.info="none",
+          trace="none",
+          scale="none",
+          col = compcoag_pal,
+          cexRow=0.5,cexCol=0.75,
+          margins=c(3,13), lwid=c(.8,3), lhei=c(.8,3),
+          srtCol=45, adjCol=c(1,1),
+          keysize=1.3, main = "Scaled: Pregnant VS Non-Pregnant Brood Pouch Expression") 
+
+```
+
+**Are there any groups of genes that differentiate between pregnant and nonpregnant males particularly well? If so, name those genes.**
+
+There are two weak groups and one strong group that differentiates between pregnant and non pregnant. From integrin alpha X to plasminogen we see a group of 7 genes which show some difference in a few individuals. Also complement factor H to heparin factor II shows another 7 genes with a loose differentiation.
+
+The best group seen however is the top gene clade which starts with complement component 6 to component factor D. It includes 10 genes and seems to show a very strong difference in all but two individuals, P8 and P5.
+
+In this next part we will recreate the heatmap however we'll use the scale function
+
+```{r heatmap2}
+
+pouch_compcoag.n <- t(pouch_compcoag)
+pouch_compcoag.tn <- t(pouch_compcoag.n)
+
+compcoag.d2 <- dist(pouch_compcoag.tn,method = "euclidean", diag = FALSE,
+                    upper = TRUE)
+
+#Now we cluster samples, then genes, using Ward linkage clustering
+compcoag.c1 <- hclust(compcoag.d1, method = "ward.D2", members = NULL)
+compcoag.c2 <- hclust(compcoag.d2, method = "ward.D2", members = NULL)
+
+#Set the color scale and resolution for our heatmap
+compcoag_pal <- colorRampPalette(c("green","yellow","red"))(n = 299)
+
+#Plot the heatmap
+par(cex.main=0.5, cex.axis=0.5, font=2, font.axis=2) # Shrink title fonts on plot
+heatmap.2(pouch_compcoag.tn,
+          Colv=rotate(as.dendrogram(compcoag.c1),
+          order=c(12,11,10,9,8,7,6,5,4,3,2,1)),
+          Rowv=as.dendrogram(compcoag.c2),
+          labRow=names_compcoag,
+          density.info="none",
+          trace="none",
+          scale="none",
+          col = compcoag_pal,
+          cexRow=0.5,cexCol=0.75,
+          margins=c(3,13), lwid=c(.8,3), lhei=c(.8,3),
+          srtCol=45, adjCol=c(1,1),
+          keysize=1.3,  main = "Not Scaled: Pregnant VS Non-Pregnant Brood Pouch Expression") 
+```
+
+**Does your heatmap look any different? If so, explain why this might be.**
+
+Without scaling the heat map loses a lot of its definition. This seems to occur because the relative intensity is not accounted for, so the strong differences observed in the bottom genes don't allow for a sensitive depiction of the data. What this means is that most of the genes seem to simply be at a single level because even though there are differences, the expression levels are more similar to each other among individuals than to different genes.
+
+7. Constructing heatmaps with clustering dendrograms for stickleback gene expression data.
+----------------------------------------------------------------------------------------
+
+```{r stickleback read in}
+#Read in our stickleback file
+stickleback <- read.delim("stickleback_CPM.tsv", sep = "\t", row.names = 1, header = T)
+
+#Create a subset for chromosome 19 with start positions between the expressed parameters
+stickle <- subset.data.frame(stickleback, stickleback$Genome_Loc == "groupXIX" & stickleback$Gene_Start_Pos > 6000000 & stickleback$Gene_Start_Pos < 12000000)
+
+stickle <- log2(stickle[,3:86]+0.01)
+
+stickle.n <- scale(t(stickle))
+stickle.tn <- t(stickle.n)
+
+stickle.d1 <- dist(stickle.n, method = "euclidean", diag = FALSE,
+                    upper = FALSE)
+stickle.d2 <- dist(stickle.tn,method = "euclidean", diag = FALSE,
+                    upper = TRUE)
+
+stickle.c1 <- hclust(stickle.d1, method = "ward.D2", members = NULL)
+stickle.c2 <- hclust(stickle.d2, method = "ward.D2", members = NULL)
+
+stickle_pal <- colorRampPalette(c("green","yellow","red"))(n = 299)
+
+par(cex.main=0.5, cex.axis=0.5, font=2, font.axis=2) # Shrink title fonts on plot
+heatmap.2(stickle.tn,
+          Colv=rotate(as.dendrogram(stickle.c1),
+          order=c(12,11,10,9,8,7,6,5,4,3,2,1)),
+          Rowv=as.dendrogram(stickle.c2),
+          density.info="none",
+          trace="none",
+          scale="none",
+          col = stickle_pal,
+          cexRow=0.5,cexCol=0.75,
+          margins=c(3,13), lwid=c(.8,3), lhei=c(.8,3),
+          srtCol=45, adjCol=c(1,1),
+          keysize=1.3, labRow = FALSE, labCol = "", main = "Stickeblack LG19 Male vs Female Expression")
+```
+
+For this next part, we'll create a random sample of genes of size 314 in order to compare our previous heat map.
+
+```{r final heat}
+sticklesample <- stickleback[sample(nrow(stickleback),314),]
+
+sticklesample <- log2(sticklesample[,3:86]+0.01)
+
+sticklesample.n <- scale(t(sticklesample))
+sticklesample.tn <- t(sticklesample.n)
+
+sticklesample.d1 <- dist(sticklesample.n, method = "euclidean", diag = FALSE,
+                    upper = FALSE)
+sticklesample.d2 <- dist(sticklesample.tn,method = "euclidean", diag = FALSE,
+                    upper = TRUE)
+
+sticklesample.c1 <- hclust(sticklesample.d1, method = "ward.D2", members = NULL)
+sticklesample.c2 <- hclust(sticklesample.d2, method = "ward.D2", members = NULL)
+
+sticklesample_pal <- colorRampPalette(c("green","yellow","red"))(n = 299)
+
+par(cex.main=0.5, cex.axis=0.5, font=2, font.axis=2) # Shrink title fonts on plot
+heatmap.2(sticklesample.tn,
+          Colv=rotate(as.dendrogram(sticklesample.c1),
+          order=c(12,11,10,9,8,7,6,5,4,3,2,1)),
+          Rowv=as.dendrogram(sticklesample.c2),
+          #labRow=names_compcoag,
+          density.info="none",
+          trace="none",
+          scale="none",
+          col = sticklesample_pal,
+          cexRow=0.5,cexCol=0.75,
+          margins=c(3,13), lwid=c(.8,3), lhei=c(.8,3),
+          srtCol=45, adjCol=c(1,1),
+          keysize=1.3,labRow = FALSE, labCol = "", main = "Stickeblack Random Sample Expression")
+```
+
+**Do you notice anything different about the clustering patterns for males and females between the two subsets? Do a quick literature search to find out why we might expect a difference given the biology of stickleback chromosome 19, and interpret what may be going on, especially regarding the clusters of genes that yield different sex-specific expression patterns in the groupXIX heatmap.**
+
+The LG19 window sampled shows a clear pattern difference between male and female sticklebacks. No such pattern is evident when we take our random sample. From doing some research, what we are likely seeing here is the sex determining loci in stickleback. Sticklebacks do not have a separate sex chromosome. Instead they have a Mendelian inherited allele which is present on LG19 that determines sex. It is thought that this is a pre-cursor to actual sex chromosome differentiation. It would seem that the majority which is preferentially expressed in females is the equivalent of the stickleback 'X' chromosome and then the small subset at the bottom shown more strongly in the males is the equivalent 'Y' chromosome.

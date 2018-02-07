@@ -1,0 +1,194 @@
+---
+title: "Ex6"
+author: "LNass"
+date: "August 28, 2017"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+Genome Annotation
+==========================================
+
+All files were added onto the same Ex6 folder on talapas so they could be referenced on the relative path. Maker was loaded with the following commands:
+
+```
+ml purge
+ml slurm
+ml easybuild gmpolf/2017a Perl/5.24.1
+export PATH=$PATH:/projects/bgmp/utils/maker/bin
+```
+
+Then in order to configure the maker run we did:
+
+```
+maker -CTL
+```
+
+This generated three option files which specify the parameters with which to run maker with. After adding in our three files to the options, we ran maker on sbatch with the following command:
+
+The three files added were pulled from the talapas directory and one from ensemble:
+```
+/home/afuiten/annotation_files/ssc_scaffold27.fasta
+/home/afuiten/annotation_files/ssco_emb_tri1.fasta
+/home/afuiten/annotation_files/uniprot_sprot.fasta
+/home/afuiten/annotation_files/consensi.fa.classified
+Oryzias_latipes.MEDAKA1.pep.all.fa.gz
+```
+```
+mpiexec -n 56 maker -base ssc_scaffold27_1 -fix_nucleotides maker_opts.ctl maker_bopts.ctl maker_exe.ctl
+```
+
+For blastp'ing platyfish and pipefish we did:
+
+```
+makeblastdb -in Xiphophorus_maculatus.Xipmac4.4.2.pep.all.fa -dbtype prot -out PLATYFISH
+blastp -query ssc.renamed.putative_function.proteins.fasta -db PLATYFISH -max_target_seqs 1 -outfmt '6 qseqid qlen sseqid slen pident nident length mismatch qstart qend sstart send evalue bitscore' -out pipeVSplatyfinal.tsv 
+```
+
+This results in 103 sequences.
+
+In order to pull out our matching platyfish sequences we used grep:
+
+```
+cat Xiphophorus_maculatus.Xipmac4.4.2.81-translated.gtf | grep -v "^#" | grep "^LG" | cut -f 1 | wc -l
+
+cat Xiphophorus_maculatus.Xipmac4.4.2.81-translated.gtf | grep -v "^#" | grep "^LG" | cut -f 9 | cut -f 2 -d " " | cut -f 1 -d ";" | sed 's/"//g' | head
+
+```
+
+```{R Read in Plot 1}
+#First we read in our pipefish transcript names and blast hit platy trascript names
+PlatyBlastGenes <- read.table('Platyfish_Genes', sep = "\n", col.names = "ID")
+PlatyBlastNames <- read.table('Pipefish_names', sep = "\n", col.names = "Name")
+
+#Read in our platy fish linkage group and transcript names
+PlatyGenes <- read.table('PLATYGENE.txt', sep = "\n", col.names = "ID")
+LG_Platyfish <- read.table('PLATYLGG.txt', sep = "\n", col.names = "PlatyLGGroup")
+
+#Join out platy fish and pipefish data
+PlatyBlast <- cbind.data.frame(PlatyBlastGenes,PlatyBlastNames)
+PlatyBlastHits <- cbind.data.frame(PlatyGenes,LG_Platyfish)
+
+#Read in our blastp data for use in start location for pipefish and platyfish
+blastdata <- read.table('pipeVSplatyfinal.tsv', sep = "\t", col.names = c("qseqid","qlen","sseqid","slen"," pident","nident","length","mismatch","qstart","qend","sstart","send","evalue","bitscore"))
+
+#Merge our platy and pipefish databases by platy transcript ID
+PlatyVPipe <- merge.data.frame(PlatyBlastHits, PlatyBlast,by="ID")
+
+#Add the start size of the transcripts for use in plot 1
+PipeLenName <- read.table('pipe_len_names', sep = "\n", col.names = "Name")
+PipeLen <- read.table('pipe_len', sep = "\n", col.names = "Length")
+PipeAllLens <- cbind.data.frame(PipeLenName,PipeLen)
+
+#Make a final database for use in plot two, joining all data by name
+FinalBlast <- merge.data.frame(PlatyVPipe,PipeAllLens,by="Name")
+```
+
+Here we do an orthology dot plot mapping the annotated Gulf pipefish scaffold against the platy linkage groups. 
+
+```{r Plot 1}
+plot(FinalBlast$Length,FinalBlast$PlatyLGGroup, xlab = "Starting BP pos for pipefish genes", ylab = "Platy linkage group", main = "Orthology Plot: Pipefish vs. Platyfish", pch = 16)
+```
+
+```{r Plot 2}
+plot(blastdata$qlen,blastdata$slen, ylab = "Platyfish Ortholog Length", xlab = "Pipefish Ortholog Length", main = "Ortholog Length of Playfish vs. Pipefish", xlim = c(0,4000), ylim = c(0,4000))
+length_reg = lm(blastdata$slen ~ blastdata$qlen)
+abline(length_reg, col = "blue")
+abline(0,1, col = "red")
+legend(175,3000, c("Linear Model of Relation","Linear line: y=x+0"), col=c("blue","red"), pch = c(19,19))
+```
+
+Questions:
+----------------
+
+**a. Why do we need to use the -fix_nucleotides flag? (1 point)**
+
+It replaces non-AA characters with N's. These can happen from different sources, such as Selenocysteine, or unresolved A to T bases, all of which just become N.
+
+**b. What is the est2genome flag? What does it do when you turn it on? (2 points)**
+
+The est2genome flag tells maker to make predictions from the transcript data. It is very imperfect due to the fragmented nature of RNA-seq, however it is good when you do not have a training file and want to provide an initial training file. Once you run it once you should simply turn it off and use the resulting file to train further.
+
+**c. What is the difference between a GFF file format and a ZFF file format? Why do we need to convert GFF to ZFF during the MAKER pipeline? (2 points)**
+
+The GFF includes all of out inferred genes, the command maker2zff actually trims this data and retains just the ones with high confidence for use in retraining. We need to covert it because in order to train snap, it requires to training file to be in ZFF format.
+
+**d. What is the difference between your first MAKER run and subsequent runs? (2 points)**
+
+The difference is how maker is inferring annotations on the genome. The first run has both the est2genome and protein2genome flags on, which means gene models are being made from both transcript evidence and protein data. Subsequent runs have genome modes being inferred by SNAP, which initially used the training file generated from the est2genome and protein2genome run, then used its own gene model generations as further training.
+
+**e. What is the difference between the seq_name.maker.non_overlapping_ab_initio.proteins.fasta, seq_name.maker.proteins.fasta, & seq_name.maker.XXX.proteins.fasta files? (3 points)**
+
+They are all protein predictions. The first file, the ab_initio, are protein predictions made computationally, without any back up transcription evidence. Our last output file had 49. The maker.proteins.fasta are proteins predicted by maker with transcript evidence, and our last file has 103. Finally we have the snap file which are the proteins predicted by the snap program which ran after having training sessions, also with transcript evidence, it found a total of 130 proteins on the last run.
+
+**f. Within the .maker.output/datastore/ directories, travel down two more directories until you find the .gff file and count the number of genes annotated on your sequence using the grep command. Copy & paste your grep script for counting genes within your .gff file (5 points). How many evidence-based genes did MAKER annotate on your scaffold during your first MAKER run? How many evidence-based genes did MAKER annotate during your second and third runs? (3 points)**
+
+First run: 119
+
+```
+cat scaffold_27.gff | grep -v "^#" | cut -f 3 | grep "gene" | wc -l
+```
+
+Second run: 100
+
+```
+cat scaffold_27_2.gff | grep -v "^#" | cut -f 3 | grep "gene" | wc -l
+```
+
+Third run: 103
+
+```
+cat scaffold_27_f.gff | grep -v "^#" | cut -f 3 | grep "gene" | wc -l
+```
+
+**g. How many non-overlapping ab initio genes did MAKER annotate on your scaffold during your first MAKER run? How many on your second & third runs? (3 points)**
+
+First run: 0
+
+```
+cat scaffold_27.maker.non_overlapping_ab_initio.proteins.fasta | grep "^>" | wc -l
+```
+
+Second run: 18
+
+```
+cat scaffold_27_2.maker.non_overlapping_ab_initio.proteins.fasta | grep "^>" | wc -l
+```
+
+Third run: 49
+
+```
+cat scaffold_27_f.maker.non_overlapping_ab_initio.proteins.fasta | grep "^>" | wc -l
+```
+
+**h. Based on your final GFF file, what is the average gene length? What is the average number of exons per gene? (2 points)**
+
+First found total number of exons: 1238
+
+```
+cat scaffold_27_f.gff | grep -v "^#" | cut -f 3 | grep "exon" | wc -l
+```
+
+We know we have 103 genes, so 1238/103 = 12.02 average exons per gene.
+
+In order to find the average length we first pulled out all the genes and their start and stop sites:
+
+```
+cat scaffold_27_f.gff | grep -v "^#" | cut -f 3,4,5 | grep "gene" | head
+```
+Then we added it all to r and with the following code got our final gene length of: 9324.67
+
+```
+gene_length = PlatyBlastGenes <- read.table('final_gene_lengths', col.names = c("gene","start","stop"))
+length_average = ave((gene_length$stop-gene_length$start))
+```
+
+**i. The orthologs of your annotated Gulf pipefish genes are found on what platyfish Linkage Group(s) based on your dot plot? What does this mean? (2 points)**
+
+The orthologs are found roughly the first half in LG1 and the second half in LG24. The pattern seems to be pretty clear of some phenomenon occurring, the evidence suggests that pipefish had a chromosomal fusion hence they map half to LG1 and half to LG24 in the platyfish.
+
+**j. What does your linear regression tell you about protein lengths in platyfish verses pipefish? (2 points)**
+
+If they were equivalent then you would expect a perfect perfectly linear relation as observed in the red line. However we notice our linear regression has a slope smaller than one, meaning that the pipefish lengths are slightly larger than the platyfish.

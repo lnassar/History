@@ -1,0 +1,36 @@
+---
+title: "Exercise4"
+author: "LNass"
+date: "August 23, 2017"
+output: html_document
+---
+
+```{r create_data}
+dir.create("C:/Users/venes/Documents/BGMP/Bi633/Workshop_Markdown/thedata")
+owd <- setwd("C:/Users/venes/Documents/BGMP/Bi633/Workshop_Markdown/thedata")
+for (samp in LETTERS[1:8]) {
+    dir.create(samp)
+    xy <- data.frame( 
+        age=exp(rnorm(50)),
+        type=sample(letters[1:3],50,replace=TRUE)
+    )
+    xy$height <- 5 + runif(1)*xy$age + 3*runif(1)*as.numeric(xy$type) + rnorm(50)
+    write.table(xy,file=paste0(samp,"/data.tsv"))
+}
+setwd(owd)
+```
+
+Make subdirectories, called iris/k, for $1 \le k \le 5$
+
+```{r createkdirectories}
+for (each in c(1,2,3,4,5)) {
+  dir.create("C:/Users/venes/Documents/BGMP/Bi633/Workshop_Markdown/iris")
+  setwd("C:/Users/venes/Documents/BGMP/Bi633/Workshop_Markdown/iris")
+  for (k in seq(5)) {
+    dir.create(k)
+  }
+
+}
+km <- kmeans(iris[,1:4], centers=3)
+pairs(iris, col=km$cluster)
+```
