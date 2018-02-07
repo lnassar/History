@@ -1,0 +1,40 @@
+---
+title: "GC_Content_Lizards_Figures"
+author: "Lizard Project"
+output:
+  pdf_document: default
+  html_document: default
+---
+  
+```{r echo=FALSE, message=FALSE}
+library(tidyverse)
+library(pander)
+```
+
+```{r echo=FALSE}
+#Read in our stats
+LizardGC = read.table(file = "GCstats.tsv", sep = "\t", header = TRUE)
+
+#Display data as a table
+pander(LizardGC)
+```
+
+Table of the GC content across the three lizards' genomes and transcriptomes.
+
+```{r echo=FALSE}
+ggplot(data = LizardGC) +
+  geom_col(mapping = aes(x = Lizards, y = GenomeGC, fill = Lizards)) + 
+  coord_cartesian(ylim=c(35,45)) +
+  labs(title = "Genome GC Content")
+```
+
+Little difference seen between Gularis and Inornata at 42.10% and 42.00% respectively, however Marmoratus has a lower GC composition at 40.25%
+
+```{r echo=FALSE}
+ggplot(data = LizardGC) +
+  geom_col(mapping = aes(x = Lizards, y = TranscriptomeGC, fill = Lizards)) + 
+  coord_cartesian(ylim=c(35,45)) +
+  labs(title = "Transcriptome GC Content")
+```
+
+Very little difference is seen among the three lizards' transcriptome GC content.
