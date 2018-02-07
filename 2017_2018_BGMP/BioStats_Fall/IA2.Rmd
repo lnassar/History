@@ -1,0 +1,233 @@
+---
+title: "IA2"
+author: "LNass"
+date: "November 21, 2017"
+output: html_document
+---
+
+# IA2
+
+## Explanation of Data
+
+```{r echo=FALSE, message=FALSE}
+library(tidyverse)
+library(FSA)
+library(pander)
+```
+
+The data consists of three different protein levels measured by mass spectrometry (ERD10, NCED9 and SRK2D). There are two different factors, both fixed. Water which has two groups, Normal, and stress (1/10 water intake). Genotype refers to a particular loss of function mutation and whether it is present (Mutant) or Wildtype.
+
+```{r}
+#First we read in our data
+plant_stress <- read.table('Plant_stress-1.tsv', header = T, sep = '\t')
+```
+
+1. What type of experimental design is this, what class of ANOVA should you run, and what are
+all of the null and alternative hypotheses relevant to your question for each of the proteins?
+
+This is a multifactor ANOVA with 2 levels, both fixed, also known as a Model I. Our null hypothesis for Factor A (Water) and Factor B (Genotype) is that their respective population means are all equal, meaning no significant difference is observed between the protein levels. The null hypothesis for A:B is that the any difference observed can be accounted for by the difference from the overall population mean, meaning there is no interaction between A and B.
+
+## Examination of Assumptions
+
+2. What are the assumptions about your analysis, and how do you test these assumptions?
+
+Our hypothesis has three assumptions:
+
+**1. Samples are normally distributed**
+**2. Equally varied**
+**3. Independent of one another**
+
+### Assumptions of ERD10
+
+First we look at ERD10
+
+```{r}
+#Create initial boxplots to being analyzing the data
+par(mfrow = c(1, 3))
+boxplot(plant_stress$ERD10 ~ plant_stress$Genotype)
+boxplot(plant_stress$ERD10 ~ plant_stress$Water)
+boxplot(plant_stress$ERD10 ~ plant_stress$Genotype * plant_stress$Water)
+```
+The distributions all seem to be normally distributed, not asymmetrical, and there doesn't seem to be a relationship between the mean and variance judging by the y-axis distributions. Independence was addressed in experimental setup.
+
+### Assumptions of NCED9
+
+Next we look at NCED9
+
+```{r}
+#Begin looking at assumptions be creating boxplots for each factor, and then their interaction. Include the same plots on a log10-1 transformed data in order to see if the data should be transformed
+par(mfrow = c(2, 3),oma=c(0,0,6,0))
+
+boxplot(plant_stress$NCED9 ~ plant_stress$Genotype)
+boxplot(plant_stress$NCED9 ~ plant_stress$Water)
+boxplot(plant_stress$NCED9 ~ plant_stress$Genotype * plant_stress$Water)
+plant_stress$NCED9 = log10(plant_stress$NCED9+1)
+boxplot(plant_stress$NCED9 ~ plant_stress$Genotype)
+boxplot(plant_stress$NCED9 ~ plant_stress$Water)
+boxplot(plant_stress$NCED9 ~ plant_stress$Genotype * plant_stress$Water)
+title("NCED9 Protein Level Factors", outer=TRUE)
+```
+The original distributions show some evidence of non-normality in the water factor and to a lesser degree when both factor interactions are compared. Likewise the original data doesn't demonstrate equal variance, most evident in the genotype and both factor interaction plots. When the data undergoes a log10+1 transformation we observe plots more evident of a normal distribution (with few exceptions), and likewise we also see a lack of relationship between the mean and variance which was present in the original data. The transformation is thereby recommended for further analysis. Independence was addressed in experimental setup.
+
+### Assumptions of SRK2D
+
+Finally we look at SRK2D
+
+```{r}
+par(mfrow = c(2, 3),oma=c(0,0,6,0))
+
+boxplot(plant_stress$SRK2D ~ plant_stress$Genotype)
+boxplot(plant_stress$SRK2D ~ plant_stress$Water)
+boxplot(plant_stress$SRK2D ~ plant_stress$Genotype * plant_stress$Water)
+plant_stress$SRK2D = log10(plant_stress$SRK2D+1)
+boxplot(plant_stress$SRK2D ~ plant_stress$Genotype)
+boxplot(plant_stress$SRK2D ~ plant_stress$Water)
+boxplot(plant_stress$SRK2D ~ plant_stress$Genotype * plant_stress$Water)
+title("SRK2D Protein Level Factors", outer=TRUE)
+```
+For the SRK2D protein, our original data also shows evidence of non-normality with large outliers and skewed values observed in all three data sets. We also see unequal variance present on all the plots, a log10+1 transformaton was then done upon the data and evaluated. When transformed we see little evidence of non-normality, primarily due to some outliers on our final interaction plot. Some data may show a small amount of relationship between mean and variance however it is minimized in comparison to the original data. A transformation is also recommended here.
+
+## Making the Models
+
+### Model for ERD10
+
+```{r}
+#Create our first multifactor ANOVA model
+plantaovERD10 = aov(ERD10 ~ Genotype * Water, data = plant_stress)
+summary(plantaovERD10)
+plot(plantaovERD10)
+
+#Here we visualize our data with a 2 way interaction plot
+
+#First we use summarize on our data to get our confidence intervals for our error bars
+Sum = Summarize(ERD10 ~ Genotype + Water, 
+                data=plant_stress, 
+                digits=3)
+
+#Add the sd and to our new variable and round the values
+Sum$se = Sum$sd / sqrt(Sum$n)
+Sum$se = signif(Sum$se, digits=3)
+
+#Create our ggplot interaction plot with error bars
+pd = position_dodge(.2)
+ggplot(Sum, aes(x = Genotype,y = mean,color = Water)) +
+    geom_errorbar(aes(ymin = mean - se,
+                      ymax = mean + se),
+                   width=.2, size=0.7, position=pd) +
+    geom_point(shape=15, size=4, position=pd) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold")) +
+    scale_colour_manual(values= c("black","red")) +
+    ylab("Mean Protein Level") +
+    ggtitle("ERD10 Interaction Plot")
+
+#Make our regular interaction plot
+Genotype <- factor(plant_stress$Genotype)
+Water <- factor(plant_stress$Water)
+interaction.plot(Water, Genotype, plant_stress$ERD10, type="b", col=c(1:3), 
+  	leg.bty="o", leg.bg="beige", lwd=2, pch=c(18,24,22),	
+   xlab="Water Treatment", 
+   ylab="Mean ERD10 Protein Level", 
+   main="Two-way Interaction Plot for ERD10")
+
+```
+
+Looking at our residuals plot for protein ERD10 we can confirm that there isn't a biased pattern in the residuals lending credence to our assumption of equal variance. Additionally our QQ plot looks adequate also supporting the presence of a normal distribution.
+
+Our model shows that there is no significant change in the means for either Genotype or Water in regards to protein for ERD10. For both we see small F values with p > .05. However the interaction between both factors is seen to be significant with an F vale of 40.6 and a p value of <.001. This means the effects of the factors on the group mean are not simply additive and infuence each other. 
+
+### Model for NCED9
+
+```{r}
+plantaovNCED9 = aov(NCED9 ~ Genotype * Water, data = plant_stress)
+summary(plantaovNCED9)
+plot(plantaovNCED9)
+
+#Data visualization
+
+Sum = Summarize(NCED9 ~ Genotype + Water, 
+                data=plant_stress, 
+                digits=3)
+
+Sum$se = Sum$sd / sqrt(Sum$n)
+Sum$se = signif(Sum$se, digits=3)
+
+#Interaction plot with error bars
+pd = position_dodge(.2)
+ggplot(Sum, aes(x = Genotype,y = mean,color = Water)) +
+    geom_errorbar(aes(ymin = mean - se,
+                      ymax = mean + se),
+                   width=.2, size=0.7, position=pd) +
+    geom_point(shape=15, size=4, position=pd) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold")) +
+    scale_colour_manual(values= c("black","red")) +
+  ylab("Mean Protein Level") +
+  ggtitle("NCED9 Interaction Plot")
+
+#Interaction plot
+Genotype <- factor(plant_stress$Genotype)
+Water <- factor(plant_stress$Water)
+interaction.plot(Water, Genotype, plant_stress$NCED9, type="b", col=c(1:3), 
+  	leg.bty="o", leg.bg="beige", lwd=2, pch=c(18,24,22),	
+   xlab="Water Treatment", 
+   ylab="Mean NCED9 Protein Level", 
+   main="Two-way Interaction Plot for NCED9")
+```
+Looking at our residuals plot for protein NCED9 we can confirm that there isn't a biased pattern in the residuals lending credence to our assumption of equal variance. The QQ plot howerver is showing a biased distribution towards the edges, though most of the points are still among our expected center line. This is likely acceptable within the robust parameters of a multifactor ANOVA however it is not entirely a normal distribution.
+
+With regards to protein NCED9, both Genotype and Water were shown to be signifcant, meaning the effect of the factors on the protein levelel led to non-zero means. Genotype was shown to have the most pronounced effect with an F value of 159.6 and a p value <.001. The water treatment was also significant with an F value of 6.7 and a p value of 0.0115. Finally the interaction between these two factors was shown not to be significant, meaning they only affect the response variable independently however do not affect each other.
+
+### Model for SRK2D
+
+```{r}
+#Create our models
+plantaovSRK2D = aov(SRK2D ~ Genotype * Water, data = plant_stress)
+summary(plantaovSRK2D)
+plot(plantaovSRK2D)
+
+#Make our interaction plot with error bars
+Sum = Summarize(SRK2D ~ Genotype + Water, 
+                data=plant_stress, 
+                digits=3)
+
+Sum$se = Sum$sd / sqrt(Sum$n)
+Sum$se = signif(Sum$se, digits=3)
+
+pd = position_dodge(.2)
+ggplot(Sum, aes(x = Genotype,y = mean,color = Water)) +
+    geom_errorbar(aes(ymin = mean - se,
+                      ymax = mean + se),
+                   width=.2, size=0.7, position=pd) +
+    geom_point(shape=15, size=4, position=pd) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold")) +
+    scale_colour_manual(values= c("black","red")) +
+  ylab("Mean Protein Level") +
+  ggtitle("SRK2D Interaction Plot")
+
+#Make our interaction plot
+Genotype <- factor(plant_stress$Genotype)
+Water <- factor(plant_stress$Water)
+interaction.plot(Water, Genotype, plant_stress$SRK2D, type="b", col=c(1:3), 
+  	leg.bty="o", leg.bg="beige", lwd=2, pch=c(18,24,22),	
+   xlab="Water Treatment", 
+   ylab="Mean SRK2D Protein Level", 
+   main="Two-way Interaction Plot for SRK2D")
+```
+Looking at our residuals plot for protein SRK2D we can confirm that there isn't a biased pattern in the residuals lending credence to our assumption of equal variance. The QQ plot shows some rather large outliers however they are few in number and overall the plot confirms the presence of a normal distribution.
+
+With regards to the SRK2D protein levels, we saw both the Genotype and Water treatment be significant as well as the interaction between the two factors. All three factors had low p values shows a strong indication of their effect, as well as the interaction. For Genotype we saw an F value of 49.4 and a p value > 0.001. For Water we saw an F value of 75.9 and a p value of < 0.001. Finally for the interaction between the two factors we also saw a significance with an F value of 23.3 and a p value < 0.001.
+
+
+Finally we make a table summarizing our results
+```{r}
+#Making a table to summarize significant results
+ERD10 = c('-','-','+')
+NCED9 = c('+','+','-')
+SRK2D = c('+','+','+')
+
+results = data.frame(ERD10,NCED9,SRK2D)
+row.names(results) = c("Genotype","Water","Genotype:Water")
+pander(results)
+```

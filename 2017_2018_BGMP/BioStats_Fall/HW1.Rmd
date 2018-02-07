@@ -1,0 +1,331 @@
+---
+title: "Bi610_HW1"
+author: "LNass"
+date: "October 16, 2017"
+output: html_document
+---
+
+# Bi610 HW1
+
+## Problem 1
+
+First we read in our RNA seq data and depict some exploratory analysis
+
+```{r}
+#We use pander to make a nice table
+library(pander)
+
+#Read the file in
+stic_RNA = read.csv("HW_RNAseq.csv")
+
+#Make our new data frame for our exploratory table
+SampleID = c("Categorical","Independent")
+Population = c("Categorical","Independent")
+Treatment = c("Categorical","Independent")
+Sex = c("Categorical","Independent")
+Gene = c("Continuous","Response")
+stic_RNA_explore = data.frame(SampleID,Population,Treatment,Sex,Gene)
+
+#Show the final exploratory table
+pander(stic_RNA_explore)
+```
+
+Next we examine each continuous variable to determine its distribution using histograms, and put these into a single,
+multi-panel figure.
+
+```{r}
+#Load tidyverse and make a tible from our data frame
+library(tidyverse)
+stick_RNA = tbl_df(stic_RNA)
+
+#Next we create 10 histograms with 2 rows and 5 items per row showing each of the gene expression distributions
+par(mfrow = c(2, 5))
+hist(stick_RNA$Gene01, main = "Gene01", xlab = "Expression", col = "blue")
+hist(stick_RNA$Gene02, main = "Gene02", xlab = "Expression", col = "red")
+hist(stick_RNA$Gene03, main = "Gene03", xlab = "Expression", col = "blue")
+hist(stick_RNA$Gene04, main = "Gene05", xlab = "Expression", col = "red")
+hist(stick_RNA$Gene05, main = "Gene05", xlab = "Expression", col = "blue")
+hist(stick_RNA$Gene06, main = "Gene06", xlab = "Expression", col = "red")
+hist(stick_RNA$Gene07, main = "Gene07", xlab = "Expression", col = "blue")
+hist(stick_RNA$Gene08, main = "Gene08", xlab = "Expression", col = "red")
+hist(stick_RNA$Gene09, main = "Gene09", xlab = "Expression", col = "blue")
+hist(stick_RNA$Gene10, main = "Gene10", xlab = "Expression", col = "red")
+```
+All data seem to follow a binomial distribution as evidenced by resampling.
+
+Transform all original continuous variables to z-scores and plot the distribution for just two genes.
+
+```{r}
+#First we write a function that will transform the values to Z Scores
+zscore <- function(column){
+pop_sd = NULL
+pop_mean = NULL
+pop_sd = sd(column)*sqrt((length(column)-1)/(length(column)))
+pop_mean = mean(column)
+result = ((column - pop_mean) / pop_sd)
+return(result)
+}
+
+#Now we use mutate to add 10 new rows all representing the ZScores
+stick_RNA2 = mutate(stick_RNA,
+       ZGene01 =  zscore(Gene01),
+       ZGene02 =  zscore(Gene02),
+       ZGene03 =  zscore(Gene03),
+       ZGene04 =  zscore(Gene04),
+       ZGene05 =  zscore(Gene05),
+       ZGene06 =  zscore(Gene06),
+       ZGene07 =  zscore(Gene07),
+       ZGene08 =  zscore(Gene08),
+       ZGene09 =  zscore(Gene09),
+       ZGene10 =  zscore(Gene10))
+
+#Next we plot two of the Z Score distributions
+par(mfrow = c(1, 2))
+hist(stick_RNA2$ZGene01, main = "Z Score Distribution Gene01", xlab = "Gene01", col = "orange")
+hist(stick_RNA2$ZGene02, main = "Z Score Distribution Gene02",xlab = "Gene02", col = "green")
+
+```
+
+Create boxplots of the original data and the z-scores for these two genes, split by population, treatment and
+sex. Use colors in your figures. Again, make a single, multi-panel figure. Our figure has 2 rows, with the top row all being Gene01 and the bottom all Gene01. For each box Gene01 variable is followed by the zscore representation, labeed ZGene.
+
+```{r}
+#Load the gridExtra package to allow many ggplots shows together
+library(gridExtra)
+
+#Next we create our 12 plots and assign them to a variable so they may be used with gridExtra. The only unsuaul command noted here is  + theme(legend.position="none"), which supresses the legend, in this case it's not necessary since there are just two treatments both represented in the axis
+#First Gene01
+p1 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Population, y = Gene01, colour = Population)) + theme(legend.position="none")
+p2 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Population, y = ZGene01, colour = Population)) + theme(legend.position="none")
+p3 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Treatment, y = Gene01, colour = Treatment)) + theme(legend.position="none")
+p4 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Treatment, y = ZGene01, colour = Treatment)) + theme(legend.position="none")
+p5 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Sex, y = Gene01, colour = Sex)) + theme(legend.position="none")
+p6 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Sex, y = ZGene01, colour = Sex)) + theme(legend.position="none")
+
+#Next Gene02
+p7 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Population, y = Gene02, colour = Population)) + theme(legend.position="none")
+p8 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Population, y = ZGene02, colour = Population)) + theme(legend.position="none")
+p9 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Treatment, y = Gene02, colour = Treatment)) + theme(legend.position="none")
+p10 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Treatment, y = ZGene02, colour = Treatment)) + theme(legend.position="none")
+p11 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Sex, y = Gene02, colour = Sex)) + theme(legend.position="none")
+p12 = ggplot(data	= stick_RNA2)	+	
+  geom_boxplot(mapping = aes(x = Sex, y = ZGene02, colour = Sex)) + theme(legend.position="none")
+
+#Finally use grid.arrange to create a figure with all 12 plots specifying the number of columns with ncol
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12, ncol = 6)
+```
+
+Calculate descriptive statistics (mean, variance, standard deviation) for each population for each variable, for
+each treatment for each variable, and for each sex for each variable. Compile these into a table.
+
+```{r}
+#Before every loop we create our variables which we will then populate
+
+BootMean = NULL
+BootVar = NULL
+BootSD = NULL
+
+#This first loop finds our mean/variance/sd for the Boot Population
+for(i in names(select(filter(stic_RNA, Population=="Boot"),starts_with("Gene")))){
+  BootMean = c(BootMean,mean(select(filter(stic_RNA, Population=="Boot"),starts_with("Gene"))[,i]))
+  BootVar = c(BootVar,var(select(filter(stic_RNA, Population=="Boot"),starts_with("Gene"))[,i]))
+  BootSD = c(BootSD,sd(select(filter(stic_RNA, Population=="Boot"),starts_with("Gene"))[,i]))
+}
+#We continue to repeat this for all desired variables and conditions
+RSMean = NULL
+RSVar = NULL
+RSSD = NULL
+
+for(i in names(select(filter(stic_RNA, Population=="RabbitSlough"),starts_with("Gene")))){
+  RSMean = c(RSMean,mean(select(filter(stic_RNA, Population=="RabbitSlough"),starts_with("Gene"))[,i]))
+  RSVar = c(RSVar,var(select(filter(stic_RNA, Population=="RabbitSlough"),starts_with("Gene"))[,i]))
+  RSSD = c(RSSD,sd(select(filter(stic_RNA, Population=="RabbitSlough"),starts_with("Gene"))[,i]))
+}
+
+ConvenMean = NULL
+ConvenVar = NULL
+ConvenSD = NULL
+
+for(i in names(select(filter(stic_RNA, Treatment=="Conventional"),starts_with("Gene")))){
+  ConvenMean = c(ConvenMean,mean(select(filter(stic_RNA, Treatment=="Conventional"),starts_with("Gene"))[,i]))
+  ConvenVar = c(ConvenVar,var(select(filter(stic_RNA, Treatment=="Conventional"),starts_with("Gene"))[,i]))
+  ConvenSD = c(ConvenSD,sd(select(filter(stic_RNA, Treatment=="Conventional"),starts_with("Gene"))[,i]))
+}
+  
+MonoAsMean = NULL
+MonoAsVar = NULL
+MonoAsSD = NULL
+
+for(i in names(select(filter(stic_RNA, Treatment=="MonoAssoc"),starts_with("Gene")))){
+  MonoAsMean = c(MonoAsMean,mean(select(filter(stic_RNA, Treatment=="MonoAssoc"),starts_with("Gene"))[,i]))
+  MonoAsVar = c(MonoAsVar,var(select(filter(stic_RNA, Treatment=="MonoAssoc"),starts_with("Gene"))[,i]))
+  MonoAsSD = c(MonoAsSD,sd(select(filter(stic_RNA, Treatment=="MonoAssoc"),starts_with("Gene"))[,i]))
+}
+
+MaleMean = NULL
+MaleVar = NULL
+MaleSD = NULL
+
+for(i in names(select(filter(stic_RNA, Sex=="male"),starts_with("Gene")))){
+  MaleMean = c(MaleMean,mean(select(filter(stic_RNA, Sex=="male"),starts_with("Gene"))[,i]))
+  MaleVar = c(MaleVar,var(select(filter(stic_RNA, Sex=="male"),starts_with("Gene"))[,i]))
+  MaleSD = c(MaleSD,sd(select(filter(stic_RNA, Sex=="male"),starts_with("Gene"))[,i]))
+}
+
+FemaleMean = NULL
+FemaleVar = NULL
+FemaleSD = NULL
+
+for(i in names(select(filter(stic_RNA, Sex=="female"),starts_with("Gene")))){
+  FemaleMean = c(FemaleMean,mean(select(filter(stic_RNA, Sex=="female"),starts_with("Gene"))[,i]))
+  FemaleVar = c(FemaleVar,var(select(filter(stic_RNA, Sex=="female"),starts_with("Gene"))[,i]))
+  FemaleSD = c(FemaleSD,sd(select(filter(stic_RNA, Sex=="female"),starts_with("Gene"))[,i]))
+}
+
+#Now that we have all our variables we compile them into a data frame and transform it to invert rows/columns for easier reading
+StatTable = t((data.frame(BootMean,BootVar,BootSD,RSMean,RSVar,RSSD,ConvenMean,ConvenVar,ConvenSD,MonoAsMean,MonoAsVar,MonoAsSD,MaleMean,MaleVar,MaleSD,FemaleMean,FemaleVar,FemaleSD)))
+
+#Here we fix the appropriate column names, set the names and finally use pander to display it as a table
+mynames = c("Gene01","Gene02","Gene03","Gene04","Gene05","Gene06","Gene07","Gene08","Gene09","Gene10")
+colnames(StatTable) = mynames
+pander(StatTable)
+```
+## Problem 2
+
+Write an R script to calculate the Standard Error (SE) and 95% confidence interval (CI) of the
+mean for each gene from above using both the parametric approach as well as the resampling approach that
+you learned in class. Assemble your results for all genes in a single table. Comment on whether the two approaches
+give you approximately the same result, and interpret your observation. In addition, modify the resampling
+approach to calculate the SE of the variance for all 10 genes, and add those to the table as well.
+
+First we calculate the SE and CI with the parametric approach, knowing the mean. Followed by the bootstrap approach.
+
+```{r}
+
+#First we get the standard error by dividing the mean by the sqrt of the sample number
+#SE = sd(stic_RNA$Gene01)/(sqrt(length(stic_RNA$Gene01)))
+
+#This is follow by getting the 95% confidence interval, we first calculate the deviation and then subtract it from the mean
+#CI = qnorm(0.975)*SE
+
+#Upper and lower CI
+#CIu = mean(stic_RNA$Gene01) + CI
+#CIl = mean(stic_RNA$Gene01) - CI
+
+#Here we create our variables for the loop
+AllSE = NULL
+AllCI = NULL
+AllCIu = NULL
+AllCIl = NULL
+
+#Input all the things we previously discussed in order to loop through out genes and calculate the SE and CI for each
+for(i in names(select(stic_RNA,starts_with("Gene")))){
+  SE = sd(stic_RNA[,i])/(sqrt(length(stic_RNA[,i])))
+  CI = qnorm(0.975)*SE
+  CIu = mean(stic_RNA[,i]) + CI
+  CIl = mean(stic_RNA[,i]) - CI
+  
+  AllSE = c(AllSE, SE)
+  AllCI = c(AllCI, CI)
+  AllCIu = c(AllCIu, CIu)
+  AllCIl = c(AllCIl, CIl)
+ }
+
+#Now we apply the same principle except we do a 1000 bootstrap sampling from our data
+
+#Here we create our variables for the loop
+bAllSE = NULL
+bAllSEvar = NULL
+bAllCI = NULL
+bAllCIu = NULL
+bAllCIl = NULL
+
+#Here we use a similar loop as before however we implement a 1000 bootstrap sampling. Also make make adjustments to our SE calculation removing the n since it is now the bootsrap standard error.
+for(i in names(select(stic_RNA,starts_with("Gene")))){
+  
+  y = NULL
+  z = NULL
+  for (a in seq(1000)) {
+    xboot = sample(stic_RNA[,i],10,replace=TRUE)
+    y = c(y,xboot)
+    z = c(z,mean(y))
+  }
+  
+  SE = sd(z)
+  SEvar = var(z)
+  CI = qnorm(0.975)*SE
+  CIu = mean(z) + CI
+  CIl = mean(z) - CI
+  
+  bAllSE = c(bAllSE, SE)
+  bAllSEvar = c(bAllSEvar, SEvar)
+  bAllCI = c(bAllCI, CI)
+  bAllCIu = c(bAllCIu, CIu)
+  bAllCIl = c(bAllCIl, CIl)
+ }
+
+#Create our data frame from the confidence interval and bootsrap data, then we adjust the names to be more descriptive and display it with pander. Note: All with bs before title means it is a bootsrap sample.
+SEandCItable = data.frame(AllSE,bAllSE,AllCI,bAllCI,AllCIu,bAllCIu,AllCIl,bAllCIl,bAllSEvar)
+SEandCInames = c("SE","bsSE","CI","bsCI","UpperCI","bsUpperCI","LowerCI","bsLowerCI","bsVarCI")
+colnames(SEandCItable) = SEandCInames
+row.names(SEandCItable) = mynames
+pander(SEandCItable)
+
+```
+**Note about the previous table:** SE = Standard Error, CI = Confidence Interval, and any bs prefix means it is a bootstrap sample.
+
+The two methods do not give the same results. While the means are very similar (as expected), the standard error is much lower on the bootstrap method. This allows for a 95% confidence interval estimation which is more precise than simply using the standard mean. This result is expected as bootstrap sort of 'cheats' by pretending to have more samples via resampling the original data set, allowing us to a predict a more accurate model.
+
+## Problem 3
+
+Pretend that you are sampling the number of Douglas Fir trees in each of 1000 plots around Mt.
+Pisgah. The data are as follows. 
+
+```{r}
+
+#First we put our data into R in order to figure out distribution (note # of trees is +1)
+Trees_Obs = seq(12)
+Plot_number = c(74, 149, 228, 181, 169, 84, 49, 24, 19, 12, 9, 4)
+TreeData = data.frame(Trees_Obs,Plot_number)
+plot(TreeData$Trees_Obs,TreeData$Plot_number, main = "Check Data Distribution", xlab = "Trees Observed", ylab = "Number of Plots")
+#A simple plot shows they are not normally distributed, initial suspicion is likely poisson
+
+#Making the data into a table and attempting to plot it as linear for a poisson is sucessful which shows a poisson distribution is present
+(x=table(TreeData$Plot_number))
+x=as.table(t(TreeData))
+k=as.numeric(names(x))
+plot(TreeData$Trees_Obs,log(t(TreeData$Plot_number))+lfactorial(TreeData$Trees_Obs), main = "Check for Poisson Distribution", ylab = '', xlab = '')
+
+#Convert our data into frequency data
+mytreevar = c(rep(0,74),rep(1,149),rep(2,228),rep(3,181),rep(4,169),rep(5,84),rep(6,49),rep(7,24),rep(8,19),rep(9,12),rep(10,9),rep(11,4))
+
+#Calculate mean and variance of data set
+mean_trees = mean(mytreevar)
+var_trees = var(mytreevar)
+
+#Lambda is our guess as to where the real mean probably lies, in this case we use 1-10, because our data set is 0-11 and we imagine that the mean is likely to fall between 1-10. Ultimately it is a guess.
+lambda = seq(1,10,by=0.001) 
+
+#Here we calculate our poisson probability distributions for each possible mean, then plot it
+ln_poisson_probs <- log((exp(1)^-lambda)*(lambda^mean_trees)/factorial(mean_trees))
+plot(lambda, ln_poisson_probs, type = "l", xlab = "Lambda", ylab = "Poisson Probabilities", col = "purple")
+
+#Now we join the probabilities with their respective mean estimates in a data frame and subset all the ones that are within our desired confidence interval from the most 'likely' mean
+lnL_func <- data.frame(lambda, ln_poisson_probs)
+ci_interval <- subset(lnL_func, ln_poisson_probs>=max(ln_poisson_probs)-0.00192)
+
+#Finally we display and lower and upper bound for our confidence intervals
+min(ci_interval$lambda)
+max(ci_interval$lambda)
+```

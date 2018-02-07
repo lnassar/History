@@ -1,0 +1,231 @@
+---
+title: "IA1"
+author: "LNass"
+date: "October 25, 2017"
+output: html_document
+---
+
+# IA1 Bi610
+
+## Hypothesis
+
+The null hypothesis is that a zebra fish diet with enriched brine shrimp nauplii will not affect mean zebrafish size when compared to an unenriched control diet.
+
+The alternative hypothesis is that the zebrafish subjected to the enriched diet will have a significant difference in mean size. This difference will then be further explored by how it is distributed across zebrafish standard length (mm) and mass (mg).
+
+## Analysis
+
+**Note**: One decimal point was removed from individual 141's weight, as well as 27's SL.
+
+First we read in our data
+
+```{r}
+library(pander)
+library(tidyverse)
+library(gridExtra)
+
+zfish_diet = read.table("zfish_diet_IA.tsv", sep = "\t", header = TRUE)
+zfish_control = subset(zfish_diet, zfish_diet$Diet=="Control")
+zfish_enriched = subset(zfish_diet, zfish_diet$Diet=="Enriched")
+
+#First let us find the mean, variance, and stdev for the control group and enriched group for SL and Weight
+
+#Mean of control standard length
+c1 = mean(zfish_control$SL)
+c2 = var(zfish_control$SL)
+c3 = sd(zfish_control$SL)
+#Mean of control weight
+c4 = mean(zfish_control$Weight)
+c5 = var(zfish_control$Weight)
+c6 = sd(zfish_control$Weight)
+
+#Mean of enriched standard length
+e1 = mean(zfish_enriched$SL)
+e2 = var(zfish_enriched$SL)
+e3 = sd(zfish_enriched$SL)
+#Mean of control weight
+e4 = mean(zfish_enriched$Weight)
+e5 = var(zfish_enriched$Weight)
+e6 = sd(zfish_enriched$Weight)
+
+#Create our table with summary statistics
+control_stats = c(c1,c2,c3,c4,c5,c6)
+enriched_stats = c(e1,e2,e3,e4,e5,e6)
+Summary_Stats = data.frame(control_stats,enriched_stats)
+colnames(Summary_Stats) = c("Control","Enriched")
+row.names(Summary_Stats) = c("SL_Mean","SL_Var","SL_SD","WT_Mean","WT_Var","WT_SD")
+pander(Summary_Stats)
+
+#Make two boxplots comparing the two treatments
+p1 = ggplot(data	= zfish_diet)	+	
+  geom_boxplot(mapping = aes(x = Diet, y = Weight, colour = Diet))+ggtitle("Weight of Control vs. Enriched (mg)")
+
+p2 = ggplot(data	= zfish_diet)	+	
+  geom_boxplot(mapping = aes(x = Diet, y = SL, colour = Diet))+ggtitle("SL of Control vs. Enriched (mm)")
+
+grid.arrange(p1,p2, ncol = 2)
+
+#Let us evaluate both coninuous vairables for a normal distribution and then perform a t-test
+
+plot(density(zfish_enriched$SL))
+shapiro.test(zfish_enriched$SL)
+qqnorm(zfish_enriched$SL);qqline(zfish_enriched$SL)
+
+#With a p-value of .1141 and a normal looking distribution we can conclude the enriched lengths are normally distributed
+
+plot(density(zfish_enriched$Weight))
+shapiro.test(zfish_enriched$Weight)
+qqnorm(zfish_enriched$Weight, main = "Normal Q-Q Plot Enriched Diet Weight", col = "blue");qqline(zfish_enriched$Weight)
+
+#The enriched weights have a p-value of .0027 which means we fail to conserve the null hypothesis that it is normally distributed. This sample therefore will likely perform better under a bootstrap approach to normalize it
+
+plot(density(zfish_control$SL))
+shapiro.test(zfish_control$SL)
+qqnorm(zfish_control$SL);qqline(zfish_control$SL)
+
+#The control lengths have a very high p-value of almost one and a distribution classically seen in a normal data sets
+
+plot(density(zfish_control$Weight))
+shapiro.test(zfish_control$Weight)
+qqnorm(zfish_control$Weight);qqline(zfish_control$Weight)
+
+#The control weights had a p-value of .3148 on top of the density plot which leads us to believe it is normally distributed
+
+
+#Perform the t.tests
+
+t.test(zfish_control$SL,zfish_enriched$SL)
+t.test(zfish_control$Weight,zfish_enriched$Weight)
+
+#Both test show a significant difference, meaning the difference between the two means is not 0 with a p value <2.2e-16
+```
+
+Now we are going to do the same t test however we are going to take a non-parametric approach. This seems like the proper course since one of our continuous variables did not show a normal distribution.
+
+```{r}
+#We are going to do 1000 sample bootstrap with 10 samples per iteration With replacement. This will be done for all 4 of our continuous data sets.
+
+#First we create our bootstrap function
+bootstrap <- function(data){
+  y = NULL
+  z = NULL
+  for (a in seq(1000)) {
+    xboot = sample(data,10,replace=TRUE)
+    y = c(y,xboot)
+    z = c(z,mean(y))
+  }
+  z = data.frame(z)
+  return(z)
+}
+
+
+#Now we apply it to our four continuous variables
+
+zfish_control_BS_SL = bootstrap(zfish_control$SL)
+zfish_control_BS_WT = bootstrap(zfish_control$Weight)
+zfish_enriched_BS_SL = bootstrap(zfish_control$SL)
+zfish_enriched_BS_WT = bootstrap(zfish_control$Weight)
+
+#Next we plot our distributions of the four new bootstrapped variables
+
+p1 = ggplot(data	=	zfish_control_BS_SL)	+	
+  geom_histogram(mapping	= aes(x	=	z),	binwidth	= .0005)+ggtitle("Control Bootstrap Distribution SL") + labs(x="Length(mm)")
+p2 = ggplot(data	=	zfish_control_BS_WT)	+	
+  geom_histogram(mapping	= aes(x	=	z),	binwidth	= .0001)+ggtitle("Control Bootstrap Distribution WT") + labs(x="Weight(mg)")
+p3 = ggplot(data	=	zfish_enriched_BS_SL)	+	
+  geom_histogram(mapping	= aes(x	=	z),	binwidth	= .0005)+ggtitle("Enriched Bootstrap Distribution SL") + labs(x="Length(mm)")
+p4 = ggplot(data	=	zfish_enriched_BS_WT)	+	
+  geom_histogram(mapping	= aes(x	=	z),	binwidth	= .0001)+ggtitle("Enriched Bootstrap Distribution WT") + labs(x="Weight(mm)")
+
+grid.arrange(p1,p2,p3,p4, ncol = 2)
+
+#Now let us calculate basic statistics for our bootstrapped samples
+
+p1 = mean(zfish_control_BS_SL$z)
+p2 = sd(zfish_control_BS_SL$z)
+
+p3 = mean(zfish_control_BS_WT$z)
+p4 = sd(zfish_control_BS_WT$z)
+
+p5 = mean(zfish_enriched_BS_SL$z)
+p6 = sd(zfish_enriched_BS_SL$z)
+
+p7 = mean(zfish_enriched_BS_WT$z)
+p8 = sd(zfish_enriched_BS_WT$z)
+
+Control_BS_SL = c(p1,p2)
+Control_BS_WT = c(p3,p4)
+Enriched_BS_SL = c(p5,p6)
+Enriched_BS_WT = c(p7,p8)
+
+Bootstrap_Stats = data.frame(Control_BS_SL,Control_BS_WT,Enriched_BS_SL,Enriched_BS_WT)
+row.names(Bootstrap_Stats) = c("Mean","SD")
+pander(Bootstrap_Stats)
+
+#Now we are computing our confidence intervals
+
+#First we write a function that will compute our confidence intervals and plot them with respect to our original mean
+ConfInter <- function(data,original_data,title){
+  SE = sd(data$z)
+  SEvar = var(data$z)
+  CI = qnorm(0.975)*SE
+  CIu = mean(data$z) + CI
+  CIl = mean(data$z) - CI
+  data$Y = 1:1000
+  myplot = ggplot(data) + 
+    geom_point(mapping = aes(x = Y, y = z)) + 
+    geom_hline(yintercept = CIu, colour="red") + 
+    geom_hline(yintercept = CIl, colour="red") + 
+    geom_hline(yintercept = mean(original_data), colour="blue") + ggtitle(title) + labs(x="",y="")
+  return(myplot)
+}
+
+p1 = ConfInter(zfish_control_BS_SL,zfish_control$SL,"CI for BS Control SL")
+p2 = ConfInter(zfish_control_BS_WT,zfish_control$Weight,"CI for BS Control WT")
+p3 = ConfInter(zfish_enriched_BS_SL,zfish_enriched$SL,"CI for BS Enriched SL")
+p4 = ConfInter(zfish_enriched_BS_WT,zfish_enriched$Weight,"CI for BS Enriched WT")
+
+grid.arrange(p1,p2,p3,p4, ncol = 2)
+
+#The red lines represent the 95% confidence intervals in our sample and the blue line represents our original pre-bootstrap mean. As evidenced by the clear graphs the control samples were clearly normally distributed before, as evidenced by the very small shift observed in the mean. The original data mean for both control samples falls well within our 95% confidence bounds for both controls. Our enriched however show an entirely different pattern. For both the SL and the WT we see our mean has greatly shifted, with the original mean now lying a far distance away from our 95% confidence interval.
+
+#Redoing our T-Tests
+t.test(zfish_control_BS_SL,zfish_enriched_BS_SL)
+t.test(zfish_control_BS_WT,zfish_enriched_BS_WT)
+
+#Both values are still tremendously small, confirming that for both weight and length we have a significant difference present in our data set.
+```
+
+Now we will investigate the relation between our two continuous variables through linear regression. Our null hypothesis is that standard length and weight have no statistical relation to each other. This would be evident with an F-statistic p value > .05. Our alternative hypothesis is that there is a poitive relationship between weight and length which will be evident from our linear regression examination.
+
+```{r}
+#First we establish our two continuous variables we will be looking at, weight and length.
+
+SL = zfish_diet$SL
+WT = zfish_diet$Weight
+
+#Now we create our linear model
+
+zfish_lm = lm(WT ~ SL)
+summary(zfish_lm)
+
+#The summary shows us that our F-Statistic has a p-value < 2.2e-16. This tells us that it would be extremely unlikely to see these results if our null hypothesis is true. Additionally we see an r^2 value of .89. This represents the proportion of our weight variable that can be explained by our standard length variable. This is a high proportion and shows that almost all variation can be explained with the two variables.
+
+plot(WT ~ SL, col = "blue", main = "Linear Model of WT and SL w/ Best Fit Line")
+abline(zfish_lm, col = "red")
+
+#Shows a clear positive linear relationship.
+
+par(mfrow=c(1,2))
+
+#Here we plot our residuals as a histogram to see their ditribution
+hist(residuals(zfish_lm), breaks=100, main = "Residual Distribution", xlab = "Residuals", col = "blue")
+
+#It can be seen that the residuals follow a normal distribution, however we will plot the residuals to confirm uniform variance
+
+plot (residuals(zfish_lm) ~ fitted.values(zfish_lm), col = "red", ylab = "Residuals", xlab = "Predicted Y", main = "Residual Variance")
+
+
+#This final plot shows clear uniform variance across our residuals. Confirming our assumptions to use a linear model.
+
+```

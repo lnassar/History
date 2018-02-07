@@ -1,0 +1,233 @@
+---
+title: "HW2"
+author: "LNass"
+date: "November 11, 2017"
+output: html_document
+---
+
+# Problem 1
+
+```{r echo=FALSE, message=FALSE}
+#First we load in our libraries
+library(car)
+library(tidyverse)
+library(pander)
+library(multcomp)
+library(gridExtra)
+```
+
+We start by loading in our data
+
+```{r}
+mydata = read_tsv("multivariate-1.tsv")
+
+#Assign each column to a different variable for simplicity
+a = mydata$ARID
+b = mydata$MAP
+c = mydata$MAT
+d = mydata$JJAMAP
+e = mydata$DJFMAP
+f = mydata$LONG
+g = mydata$LAT
+```
+
+Let's look at what the data means.
+
+6 independent, 1 dependent
+
+MAP = Mean Annual Precipitatio - Indepdendent
+MAT = Mean Annual Temperature - Indepdendent
+ARID = Abundance of arid plants in numerous plots = Depdendent
+JJAMAP = Proportion of MAP that falls  June - August - Independent
+DJFMAP = Proportion of MAP that falls December - Feb - Independenent
+LONG + LAT = coordinates - Independent
+
+```{r}
+#Get an initial look at the data
+scatterplotMatrix(~a+b+c+d+e+f+g, diag="boxplot")
+```
+
+Begin by looking at a scatterplot matrix of all our variables. Initial impression is that not all variables have linear relationships, some are crearly in violation. In order to investigate the rest of these relationships we will examine the four multiple linear regeression assumptions.
+
+## Multivariate Regression Assumptions:
+
+### 1. Linearity: Linear relationship between response variable and independent variables.
+
+```{r}
+scatterplotMatrix(~a+b+c+d+e+f+g, diag="boxplot")
+#Load the gridExtra package to allow many ggplots shows together
+p1 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = MAP))
+p2 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = MAT))
+p3 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = JJAMAP))
+p4 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = DJFMAP))
+p5 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = LONG))
+p6 = ggplot(data	= mydata)	+	
+  geom_point(mapping = aes(x = ARID, y = LAT))
+
+grid.arrange(p1,p2,p3,p4,p5,p6, ncol = 3)
+```
+We see here at some do follow a linear relationship, LAT,LONG, etc. However it seems like two of our independent variables do not, DJFMAP and MAP. JJAMAP is difficult to discern.
+
+### 2. Homogeneity of variance: Variance of error terms are similar accross the values of the indepedent variables. 
+
+```{r}
+par(mfrow = c(2, 3))
+
+#Create our linear model
+lm1 = lm(b~a)
+#Plot residuals
+plot(residuals(lm1) ~ fitted.values(lm1), main = "MAP Residuals", ylab = "", xlab = "")
+
+lm2 = lm(c~a)
+plot(residuals(lm2) ~ fitted.values(lm2), main = "MAT Residuals", ylab = "", xlab = "")
+
+lm3 = lm(d~a)
+plot(residuals(lm3) ~ fitted.values(lm3), main = "JJAMAP Residuals", ylab = "", xlab = "")
+
+lm4 = lm(e~a)
+plot(residuals(lm4) ~ fitted.values(lm4), main = "DJFMAP Residuals", ylab = "", xlab = "")
+
+lm5 = lm(f~a)
+plot(residuals(lm5) ~ fitted.values(lm5), main = "LONG Residuals", ylab = "", xlab = "")
+
+lm6 = lm(g~a)
+plot(residuals(lm6) ~ fitted.values(lm6), main = "LAT Residuals", ylab = "", xlab = "")
+
+```
+Here we see that our residuals are randomly distributed, a condition that seems to be violated by all of our variables. It is worth noting that the most biased distribution seems to be the MAT variable.
+
+### 3. Normality: Residuals are normally distributed
+
+```{r}
+par(mfrow = c(2, 3))
+
+#Plot the residuals as histogram
+hist(residuals(lm1), breaks=25, main = "MAP Residuals", ylab = "", xlab = "")
+hist(residuals(lm2), breaks=25, main = "MAT Residuals", ylab = "", xlab = "")
+hist(residuals(lm3), breaks=25, main = "JJAMAP Residuals", ylab = "", xlab = "")
+hist(residuals(lm4), breaks=25, main = "DJFMAP Residuals", ylab = "", xlab = "")
+hist(residuals(lm5), breaks=25, main = "LONG Residuals", ylab = "", xlab = "")
+hist(residuals(lm6), breaks=25, main = "LAT Residuals", ylab = "", xlab = "")
+```
+Here we are looking for normal distribution amongst our residuals. The condition seems to be met by most of the variables, with the exception of LONG, and most of all DFJMAP.
+
+
+### 4. Multicollinearity: Independent variables not highly correlated with each other.
+
+```{r}
+#Use cor to display a correlation matrix of our data
+round(cor(mydata),2)
+```
+Finally we are looking at if our independent variables correlate with each other. We see three clear violations here: LAT and MAT have a negative correlation of -0.84, JJAMAP and DJFMAP have a negative correlation of -0.79, and LONG and MAP which have a negative correlation of -0.73.
+
+## Fitting a Multivariate Model
+
+```{r}
+#Here we make our model
+mylm = lm(a ~ b+c+d+e+f+g)
+pander(summary(mylm))
+plot(mylm)
+```
+
+
+Her we can see an overall fit of .4249 according to our adjusted R^2 value. However when we look at the invdividual p values for our parameters we see that only one of them failes to reject the null hypothesis, paramter g which is LAT.
+
+If we write out out equation with just LAT, it still has an adjusted R^2 of .437. So a simplified equation to describe our model would look like:
+
+
+$$ARID_{i} = \beta _{0} + \beta _{1}(LAT)_{i} + \varepsilon _{i}$$
+
+# Problem 2
+
+```{r}
+biofilmdata = read_tsv("biofilm-1.tsv")
+```
+
+First we consider the data. We are looking at specific bacteria concentration in four different soil types. In this case our soil types are fixed effects because they represent a specific, chosen substrate in which the bacteria were collected from.
+
+Before we can begin our anaylsis we need to explore the three ANOVA assumptions:
+
+**1. Normally distributed groups**
+**2. Equal variance across groups**
+**3. Observations in a group are independent**
+
+```{r}
+#First we just look at the data to get an idea of what is happening
+ggplot(data	= biofilmdata)	+	
+  geom_boxplot(mapping = aes(x = BIOFILM, y = CONC, colour = BIOFILM))
+```
+
+```{r}
+#Here we make our ANOVA model
+bioanova = aov(CONC ~ BIOFILM, data = biofilmdata)
+plot(bioanova)
+```
+
+The first thing to look for are violations to our assumptions. With the exceptions of just a few outliers our QQ plot looks normal so we can assume a normal distribution. Our residuals vs fitted also look normal with just minor alterations, so we can assume equal variance and independence of observations.
+
+```{r}
+#Now we are going to look at our model details
+pander(summary(bioanova))
+```
+
+Our model has 3 degrees of freedom, an F-statistic of 20.5 and a miniscule p-value. From these results we can reject our null hypothesis; the mean is not the same for all the groups. That means at least one of the biofilm treatments has a mean that significantely deviates from the rest.
+
+
+Next we perform a Tukey's post-hoc test to explore the differences between the factor levels.
+
+```{r}
+#Here we perform out Tukey post-hoc test. First we read in our biofilm data as factor, then make a new model and rune the test
+x = as.factor(biofilmdata$BIOFILM)
+y = biofilmdata$CONC
+
+tukeyanova <- aov(y ~ x)
+
+summary(glht(tukeyanova, linfct = mcp(x = "Tukey")))
+```
+
+We can see that the three variables that showed a significant difference among the levels were: SL - F, SL - NL, UL - SL. Next we will plot these three all next to each other in order to get a better understanding.
+
+```{r}
+p1 = ggplot(data	= subset(biofilmdata, BIOFILM == "SL" | BIOFILM == "F"))	+	
+  geom_boxplot(mapping = aes(x = BIOFILM, y = CONC, colour = BIOFILM)) + ggtitle("SL vs. F")
+
+p2 = ggplot(data	= subset(biofilmdata, BIOFILM == "SL" | BIOFILM == "NL"))	+	
+  geom_boxplot(mapping = aes(x = BIOFILM, y = CONC, colour = BIOFILM)) + ggtitle("SL vs. NL")
+
+p3 = ggplot(data	= subset(biofilmdata, BIOFILM == "UL" | BIOFILM == "SL"))	+	
+  geom_boxplot(mapping = aes(x = BIOFILM, y = CONC, colour = BIOFILM)) + ggtitle("SL vs. UL")
+
+grid.arrange(p1,p2,p3, ncol = 3)
+```
+
+Finally we perform two separate planned comparisons in order to test:
+1. Mean of the UL level is equal to NL
+2. SL level mean is twice that of F level
+
+```{r}
+bioanova$xlevels
+
+#My level orders are F, NL, SL, UL
+#First contrast will be 0, -1, 0 1    This will see if there is a difference between NL and UL, if not they are equal
+#Second contrast will be .5, 0, -.5, 0 This will see if there is a difference between twice F and half of SL
+
+#We make our contrast matrix
+contrasts(x) = cbind(c(0, -1, 0, 1), c(.5, 0, -.5, 0))
+
+#We check that it is orthogonal
+round(crossprod(contrasts(x)), 2)
+
+#Define our labels
+contrastlalbels = list(x = list("NL vs UL" = 1, "2SL = F" = 2))
+
+#Fit our model
+fixed_model = aov(y~x)
+summary(fixed_model, split = contrastlalbels)
+```
+
+We can see from our planned comparison tests that we failed to reject our null hypothesis with NL vs UL, meaning that the means are both the same. Between SL and F however saw a significant p-value, meaming that we reject our null hypothesis. That means that 2SL != F according to their means.
