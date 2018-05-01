@@ -28,9 +28,6 @@ if parser.output is False: #Add our conditional to check if a custom name was pa
 else:
     FileName = parser.output
 
-#Set our passed variables
-# InputFile = parser.fasta
-
 #####################################################################################
 #3. OPEN FILES AND CREATE FIRST DESCRIPTIVE LINES
 
@@ -130,7 +127,7 @@ for entry in VCFfile:
                     consequence = consequence.split("'")
                     Output.write(str(consequence[2])+"\n")
 					
-#					print(consequence[2]) #Retain for quality control
+#		print(consequence[2]) #Retain for quality control
             
             else:
                 #If ExAC database had no info on our variant, then allele frequency and consequence are "No Data"
